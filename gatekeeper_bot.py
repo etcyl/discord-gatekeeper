@@ -54,6 +54,10 @@ def save_verified(data):
 
 
 verified_users = load_verified()
+for uid, val in list(verified_users.items()):
+    if isinstance(val, bool):
+        verified_users[uid] = {"verified": val}
+
 
 # === ONBOARDING EMBED ===
 async def send_onboarding_embed(member: discord.Member):
@@ -191,6 +195,11 @@ async def log_verification_event(guild: discord.Guild, member: discord.Member, a
 import logging
 import csv
 import time
+from collections import Counter
+import matplotlib.pyplot as plt
+import discord
+from discord import File
+import io
 
 # Setup audit logger
 logging.basicConfig(
@@ -202,6 +211,65 @@ logging.basicConfig(
 # Cooldown tracker for reset command
 reset_cooldowns = {}
 RESET_COOLDOWN_SECONDS = 60
+
+@bot.command()
+async def classstats(ctx):
+    class_members = {cls: [] for cls in CLASS_ROLES}
+
+    for guild in bot.guilds:
+        for member in guild.members:
+            class_role = next((role.name for role in member.roles if role.name in CLASS_ROLES), None)
+            if class_role:
+                class_members[class_role].append(member.display_name)
+
+    if not any(class_members.values()):
+        await ctx.send("📊 No class roles assigned yet.")
+        return
+
+    # Generate class breakdown with names
+    summary_lines = ["**🏰 Vindicated's Class Composition**"]
+    for cls in sorted(CLASS_ROLES, key=lambda c: len(class_members[c]), reverse=True):
+        members = class_members[cls]
+        count = len(members)
+        if count == 0:
+            continue
+        member_list = ", ".join(sorted(members))
+        summary_lines.append(f"\n**{cls}** ({count}):\n{member_list}")
+
+    # Send paginated output if too long
+    split_output = []
+    chunk = ""
+    for line in summary_lines:
+        if len(chunk + line) > 1900:
+            split_output.append(chunk)
+            chunk = ""
+        chunk += line + "\n"
+    split_output.append(chunk)
+
+    for part in split_output:
+        await ctx.send(part)
+
+    # Optional chart generation (unchanged)
+    labels = [cls for cls in CLASS_ROLES if len(class_members[cls]) > 0]
+    sizes = [len(class_members[cls]) for cls in labels]
+
+    if sizes:
+        plt.figure(figsize=(8, 6))
+        plt.bar(labels, sizes, color='skyblue')
+        plt.title("Vindicated Class Composition")
+        plt.xlabel("Class")
+        plt.ylabel("Count")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png')
+        buffer.seek(0)
+        plt.close()
+
+        file = File(fp=buffer, filename="class_composition.png")
+        await ctx.send(file=file)
+
 
 @bot.command()
 async def classstatus(ctx, member: discord.Member = None):
@@ -402,7 +470,10 @@ async def check_verification(member: discord.Member):
         await member.add_roles(member_role)
         print(f"[ROLE] Added Member to {member.name}")
 
-    verified_users[str(member.id)] = True
+    user_record = verified_users.get(str(member.id), {})
+    user_record["verified"] = True
+    verified_users[str(member.id)] = user_record
+
     save_verified(verified_users)
 
     await member.send("🎉 Welcome! You've been verified and now have full access.")
@@ -415,7 +486,9 @@ async def check_verification(member: discord.Member):
 async def on_member_join(member):
     print(f"[JOIN] New member joined: {member.name}")
 
-    if str(member.id) in verified_users:
+    record = verified_users.get(str(member.id), {})
+    if record.get("verified"):
+
         print(
             f"[INFO] {member.name} was previously verified. Re-applying Member role."
         )
@@ -466,7 +539,10 @@ async def forceverify(ctx, member: discord.Member):
         await member.add_roles(member_role)
         print(f"[ADMIN] Added Member to {member.name}")
 
-    verified_users[str(member.id)] = True
+    user_record = verified_users.get(str(member.id), {})
+    user_record["verified"] = True
+    verified_users[str(member.id)] = user_record
+
     save_verified(verified_users)
 
     await member.send("✅ You've been manually verified.")
