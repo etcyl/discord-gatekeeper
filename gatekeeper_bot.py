@@ -1,10 +1,16 @@
-from datetime import datetime
+import os
+import io
+import csv
+import json
+import logging
+import time
 import discord
+import matplotlib.pyplot as plt
 from discord.ext import commands
 from discord.ui import View, Button
+from discord import File
 from dotenv import load_dotenv
-import json
-import os
+
 
 load_dotenv()  # This must come before os.getenv
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -16,6 +22,22 @@ NEWCOMER_ROLE = "Newcomer"
 MEMBER_ROLE = "Guild Member"
 ONBOARDING_CHANNEL = "onboarding"
 VERIFIED_DB = "verified_users.json"
+ALTS_DB = "alts.json"
+ALT_ROLE_NAME = "Alt"
+BOT_OWNER_NAME = "Bingtoolbar"
+
+CLASS_ROLES = ["Druid", "Hunter", "Mage", "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior"]
+CLASS_EMOJIS = {
+    ":Warrior:": "Warrior",
+    ":Mage:": "Mage",
+    ":Warlock:": "Warlock",
+    ":Paladin:": "Paladin",
+    ":Druid:": "Druid",
+    ":Priest:": "Priest",
+    ":Rogue:": "Rogue",
+    ":Shaman:": "Shaman",
+    ":Hunter:": "Hunter"
+}
 
 # === INTENTS ===
 intents = discord.Intents.default()
@@ -192,15 +214,6 @@ async def log_verification_event(guild: discord.Guild, member: discord.Member, a
 
 
 # === CLASS ROLE SELECTION ===
-import logging
-import csv
-import time
-from collections import Counter
-import matplotlib.pyplot as plt
-import discord
-from discord import File
-import io
-
 # Setup audit logger
 logging.basicConfig(
     filename='class_role_audit.log',
@@ -212,54 +225,183 @@ logging.basicConfig(
 reset_cooldowns = {}
 RESET_COOLDOWN_SECONDS = 60
 
+# === GOAL ===
+# Extend the bot to support tracking up to 10 alts per player.
+# Link alt character names to a single Discord user profile (not to another display name).
+
+# === ALT STORAGE ===
+def load_alts():
+    if not os.path.exists(ALTS_DB):
+        with open(ALTS_DB, 'w') as f:
+            json.dump({}, f)
+    with open(ALTS_DB, 'r') as f:
+        return json.load(f)
+
+def save_alts(data):
+    with open(ALTS_DB, 'w') as f:
+        json.dump(data, f, indent=2)
+
+alts_data = load_alts()
+
+# === ADMIN OVERRIDE CHECK ===
+def is_admin_or_owner(ctx):
+    return ctx.author.guild_permissions.administrator or ctx.author.display_name == BOT_OWNER_NAME or ctx.author.name == BOT_OWNER_NAME
+
+# === ALT STORAGE ===
+def load_alts():
+    if not os.path.exists(ALTS_DB):
+        with open(ALTS_DB, 'w') as f:
+            json.dump({}, f)
+    with open(ALTS_DB, 'r') as f:
+        return json.load(f)
+
+def save_alts(data):
+    with open(ALTS_DB, 'w') as f:
+        json.dump(data, f, indent=2)
+
+alts_data = load_alts()
+
+# === ADMIN OVERRIDE CHECK ===
+def is_admin_or_owner(ctx):
+    return ctx.author.guild_permissions.administrator or ctx.author.display_name == BOT_OWNER_NAME or ctx.author.name == BOT_OWNER_NAME
+
+@bot.command()
+async def listalts(ctx, member: discord.Member = None):
+    member = member or ctx.author
+    user_id = str(member.id)
+    record = alts_data.get(user_id)
+
+    if not record:
+        await ctx.send(f"❌ No main/alt records found for {member.display_name}.")
+        return
+
+    main = record.get("main", "(not set)")
+    alts = record.get("alts", {})
+
+    lines = [f"**{member.display_name}'s Main:** `{main}`"]
+    if alts:
+        lines.append("**Alts:**")
+        for alt, alt_class in alts.items():
+            lines.append(f"• `{alt}` ({alt_class})")
+    else:
+        lines.append("*(No alts recorded)*")
+
+    await ctx.send("\n".join(lines))
+
+@bot.command()
+async def reassignalt(ctx, alt_name: str, member: discord.Member, alt_class: str):
+    if not is_admin_or_owner(ctx):
+        await ctx.send("❌ You do not have permission to reassign alts.")
+        return
+
+    alt_class = alt_class.capitalize()
+    valid_classes = CLASS_ROLES
+    if alt_class not in valid_classes:
+        await ctx.send(f"❌ Invalid class `{alt_class}`. Choose from: {', '.join(valid_classes)}")
+        return
+
+    for uid, record in alts_data.items():
+        existing = record.get("alts", {})
+        if isinstance(existing, dict) and alt_name in existing:
+            del record["alts"][alt_name]
+            logging.info(f"Removed alt '{alt_name}' from user ID {uid}")
+
+    new_owner_id = str(member.id)
+    alts_data[new_owner_id] = alts_data.get(new_owner_id, {})
+    alts_data[new_owner_id].setdefault("alts", {})
+    alts_data[new_owner_id]["alts"][alt_name] = alt_class
+    alts_data[new_owner_id]["main"] = member.display_name
+
+    save_alts(alts_data)
+    logging.info(f"Alt '{alt_name}' ({alt_class}) reassigned to user '{member.display_name}' (ID: {new_owner_id}) by {ctx.author.display_name}")
+    await ctx.send(f"🔄 `{alt_name}` ({alt_class}) is now assigned as an alt to `{member.display_name}`.")
+
+@bot.command()
+async def setmainfor(ctx, member: discord.Member, main_name: str, main_class: str = None):
+    if not is_admin_or_owner(ctx):
+        await ctx.send("❌ You do not have permission to set another user's main.")
+        return
+
+    user_id = str(member.id)
+    alts_data[user_id] = alts_data.get(user_id, {})
+    old_main = alts_data[user_id].get("main")
+    alts_data[user_id]["main"] = main_name
+
+    if main_class:
+        main_class = main_class.capitalize()
+        if main_class not in CLASS_ROLES:
+            await ctx.send(f"❌ Invalid class `{main_class}`. Choose from: {', '.join(CLASS_ROLES)}")
+            return
+        alts_data[user_id]["class"] = main_class
+
+    if old_main and old_main != main_name:
+        alts_data[user_id].setdefault("alts", {})
+        if old_main not in alts_data[user_id]["alts"]:
+            alts_data[user_id]["alts"][old_main] = "Unknown"
+
+    save_alts(alts_data)
+    logging.info(f"Main for user '{member.display_name}' (ID: {user_id}) set to '{main_name}' with class '{main_class}' by {ctx.author.display_name}")
+    await ctx.send(f"🛠 `{member.display_name}`'s main set to `{main_name}`" + (f" with class `{main_class}`." if main_class else "."))
+
+
 @bot.command()
 async def classstats(ctx):
     class_members = {cls: [] for cls in CLASS_ROLES}
+    all_members_combined = {cls: [] for cls in CLASS_ROLES}
+    is_alt_flags = {}
 
+    # Step 1: Collect all alts from DB
+    for uid, record in alts_data.items():
+        main_name = record.get("main")
+        main_class = record.get("class")
+        if main_name and main_class in CLASS_ROLES:
+            class_members[main_class].append(main_name)
+            all_members_combined[main_class].append(main_name)
+            is_alt_flags[main_name] = False
+
+        for alt_name, alt_class in record.get("alts", {}).items():
+            if alt_class in CLASS_ROLES:
+                class_members[alt_class].append(f"{alt_name} (Alt)")
+                all_members_combined[alt_class].append(alt_name)
+                is_alt_flags[alt_name] = True
+
+    # Step 2: Collect live Discord members
     for guild in bot.guilds:
         for member in guild.members:
             class_role = next((role.name for role in member.roles if role.name in CLASS_ROLES), None)
             if class_role:
-                class_members[class_role].append(member.display_name)
+                if member.display_name not in is_alt_flags and member.display_name not in class_members[class_role]:
+                    class_members[class_role].append(member.display_name)
+                    all_members_combined[class_role].append(member.display_name)
+                    is_alt_flags[member.display_name] = False
 
     if not any(class_members.values()):
         await ctx.send("📊 No class roles assigned yet.")
         return
 
-    # Generate class breakdown with names
     summary_lines = ["**🏰 Vindicated's Class Composition**"]
-    for cls in sorted(CLASS_ROLES, key=lambda c: len(class_members[c]), reverse=True):
-        members = class_members[cls]
-        count = len(members)
-        if count == 0:
-            continue
-        member_list = ", ".join(sorted(members))
-        summary_lines.append(f"\n**{cls}** ({count}):\n{member_list}")
+    for cls in sorted(class_members):
+        members = sorted(class_members[cls], key=lambda x: x.lower())
+        if members:
+            summary_lines.append(f"\n**{cls}** ({len(members)}):\n" + ", ".join(members))
 
-    # Send paginated output if too long
-    split_output = []
-    chunk = ""
-    for line in summary_lines:
-        if len(chunk + line) > 1900:
-            split_output.append(chunk)
-            chunk = ""
-        chunk += line + "\n"
-    split_output.append(chunk)
-
-    for part in split_output:
+    for part in summary_lines:
         await ctx.send(part)
 
-    # Optional chart generation (unchanged)
-    labels = [cls for cls in CLASS_ROLES if len(class_members[cls]) > 0]
-    sizes = [len(class_members[cls]) for cls in labels]
+    labels = [cls for cls in CLASS_ROLES if len(all_members_combined[cls]) > 0]
+    mains_count = [len([m for m in all_members_combined[cls] if not is_alt_flags.get(m, False)]) for cls in labels]
+    alts_count = [len([m for m in all_members_combined[cls] if is_alt_flags.get(m, False)]) for cls in labels]
 
-    if sizes:
+    if mains_count or alts_count:
+        x = range(len(labels))
         plt.figure(figsize=(8, 6))
-        plt.bar(labels, sizes, color='skyblue')
-        plt.title("Vindicated Class Composition")
+        plt.bar(x, mains_count, label='Mains', color='skyblue')
+        plt.bar(x, alts_count, bottom=mains_count, label='Alts', color='orange')
+        plt.title("Vindicated Full Class Composition (Mains + Alts)")
         plt.xlabel("Class")
         plt.ylabel("Count")
-        plt.xticks(rotation=45)
+        plt.xticks(ticks=x, labels=labels, rotation=45)
+        plt.legend()
         plt.tight_layout()
 
         buffer = io.BytesIO()
@@ -267,9 +409,78 @@ async def classstats(ctx):
         buffer.seek(0)
         plt.close()
 
-        file = File(fp=buffer, filename="class_composition.png")
+        file = File(fp=buffer, filename="full_class_composition.png")
         await ctx.send(file=file)
 
+@bot.command()
+async def addalt(ctx, alt_name: str, alt_class: str):
+    user_id = str(ctx.author.id)
+    alt_class = alt_class.capitalize()
+
+    if alt_class not in CLASS_ROLES:
+        await ctx.send(f"❌ Invalid class `{alt_class}`. Choose from: {', '.join(CLASS_ROLES)}")
+        return
+
+    record = alts_data.get(user_id, {})
+    record.setdefault("alts", {})
+    record.setdefault("main", ctx.author.display_name)  # Optional: default to their name
+
+    if alt_name in record["alts"]:
+        await ctx.send(f"🧾 Alt `{alt_name}` is already linked to your account.")
+        return
+
+    if len(record["alts"]) >= 9:
+        await ctx.send("⚠️ You can only have up to 9 alts per main (10 characters total).")
+        return
+
+    record["alts"][alt_name] = alt_class
+    alts_data[user_id] = record
+    save_alts(alts_data)
+
+    await ctx.send(f"✅ Added alt `{alt_name}` with class `{alt_class}` to your account.")
+
+
+@bot.command()
+async def removealt(ctx, alt_name: str):
+    user_id = str(ctx.author.id)
+    if user_id not in alts_data:
+        await ctx.send("❌ You have no alts recorded.")
+        return
+    alts = alts_data[user_id].get("alts", [])
+    if alt_name not in alts:
+        await ctx.send(f"❌ `{alt_name}` is not listed as one of your alts.")
+        return
+    alts.remove(alt_name)
+    alts_data[user_id]["alts"] = alts
+    save_alts(alts_data)
+    await ctx.send(f"🗑 Removed alt `{alt_name}` from your account.")
+
+@bot.command()
+async def whoismain(ctx, alt_name: str):
+    for main_id, record in alts_data.items():
+        if alt_name in record.get("alts", []):
+            main = record.get("main", "Unknown")
+            await ctx.send(f"🧾 `{alt_name}` belongs to main: `{main}`")
+            return
+    await ctx.send(f"❌ `{alt_name}` not found in alt records.")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def importalts(ctx):
+    """Import alts from a local CSV file named 'alts_import.csv' with MainName,Alt1,Alt2,..."""
+    try:
+        with open('alts_import.csv', newline='') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                main_name = row[0].strip()
+                alts = [alt.strip() for alt in row[1:] if alt.strip()]
+                main_member = discord.utils.get(ctx.guild.members, display_name=main_name)
+                if main_member:
+                    alts_data[str(main_member.id)] = {"main": main_name, "alts": alts}
+        save_alts(alts_data)
+        await ctx.send("📥 Alts imported successfully from alts_import.csv")
+    except Exception as e:
+        await ctx.send(f"❌ Error importing alts: {e}")
 
 @bot.command()
 async def classstatus(ctx, member: discord.Member = None):
@@ -331,19 +542,6 @@ async def resetclass(ctx, member: discord.Member = None):
     logging.info(log_msg)
     print(f"[ADMIN] {log_msg}")
 
-CLASS_ROLES = ["Warlock", "Warrior", "Paladin", "Druid", "Priest", "Rogue", "Hunter", "Mage", "Shaman"]
-CLASS_EMOJIS = {
-    "⚔️": "Warrior",
-    "🔮": "Mage",
-    "🌑": "Warlock",
-    "🌟": "Paladin",
-    "🌿": "Druid",
-    "✨": "Priest",
-    "🗡️": "Rogue",
-    "🌩️": "Shaman",
-    "🌹": "Hunter"
-}
-
 class ClassRoleView(View):
     def __init__(self, member):
         super().__init__(timeout=120)
@@ -400,9 +598,13 @@ async def prompt_for_class_role(member):
                 f"{member.mention}, please select your class (react or use dropdown):",
                 view=ClassRoleView(member)
             )
-            for emoji in CLASS_EMOJIS:
-                await class_prompt.add_reaction(emoji)
 
+            for emoji_name in CLASS_EMOJIS:
+                emoji_obj = discord.utils.get(member.guild.emojis, name=emoji_name.strip(":"))
+                if emoji_obj:
+                    await class_prompt.add_reaction(emoji_obj)
+                else:
+                    print(f"[WARN] Emoji {emoji_name} not found in guild.")
 @bot.event
 async def on_raw_reaction_add(payload):
     if payload.member is None or payload.member.bot:
