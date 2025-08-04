@@ -187,7 +187,204 @@ async def log_verification_event(guild: discord.Guild, member: discord.Member, a
         print("[WARN] Onboarding channel not found for logging!")
 
 
-# === CHECK VERIFICATION ===
+# === CLASS ROLE SELECTION ===
+import logging
+import csv
+import time
+
+# Setup audit logger
+logging.basicConfig(
+    filename='class_role_audit.log',
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
+
+# Cooldown tracker for reset command
+reset_cooldowns = {}
+RESET_COOLDOWN_SECONDS = 60
+
+@bot.command()
+async def classstatus(ctx, member: discord.Member = None):
+    member = member or ctx.author
+    assigned_class = next((role.name for role in member.roles if role.name in CLASS_ROLES), None)
+    if assigned_class:
+        await ctx.send(f"📜 {member.display_name} has class role: **{assigned_class}**")
+    else:
+        await ctx.send(f"❌ {member.display_name} does not have a class role assigned.")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def exportclasses(ctx):
+    with open("class_roles_export.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["User ID", "Username", "Class Role"])
+        for guild in bot.guilds:
+            for member in guild.members:
+                class_role = next((r.name for r in member.roles if r.name in CLASS_ROLES), None)
+                if class_role:
+                    writer.writerow([member.id, member.name, class_role])
+    await ctx.send("📤 Exported class roles to `class_roles_export.csv`")
+
+@bot.command()
+async def resetclass(ctx, member: discord.Member = None):
+    now = time.time()
+    caller_id = ctx.author.id
+    if caller_id in reset_cooldowns and now - reset_cooldowns[caller_id] < RESET_COOLDOWN_SECONDS:
+        remaining = int(RESET_COOLDOWN_SECONDS - (now - reset_cooldowns[caller_id]))
+        await ctx.send(f"⏱ Please wait {remaining} seconds before using this command again.")
+        return
+    reset_cooldowns[caller_id] = now
+
+    if member is None:
+        member = ctx.author
+    elif not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ You don't have permission to reset others.")
+        return
+
+    user_record = verified_users.get(str(member.id), {})
+    for role_name in CLASS_ROLES:
+        role = discord.utils.get(member.guild.roles, name=role_name)
+        if role and role in member.roles:
+            try:
+                await member.remove_roles(role)
+            except Exception as e:
+                logging.error(f"Failed to remove role {role_name} from {member.name}: {e}")
+
+    user_record["class_assigned"] = False
+    verified_users[str(member.id)] = user_record
+    save_verified(verified_users)
+
+    onboarding_channel = discord.utils.get(ctx.guild.text_channels, name=ONBOARDING_CHANNEL)
+    if onboarding_channel:
+        await onboarding_channel.send(f"🔁 {member.mention}'s class role prompt has been reset by {ctx.author.mention}.")
+    await prompt_for_class_role(member)
+    await ctx.send(f"✅ {member.display_name} has been prompted again for class role selection.")
+    log_msg = f"Class role prompt reset for {member.name} by {ctx.author.name}"
+    logging.info(log_msg)
+    print(f"[ADMIN] {log_msg}")
+
+CLASS_ROLES = ["Warlock", "Warrior", "Paladin", "Druid", "Priest", "Rogue", "Hunter", "Mage", "Shaman"]
+CLASS_EMOJIS = {
+    "⚔️": "Warrior",
+    "🔮": "Mage",
+    "🌑": "Warlock",
+    "🌟": "Paladin",
+    "🌿": "Druid",
+    "✨": "Priest",
+    "🗡️": "Rogue",
+    "🌩️": "Shaman",
+    "🌹": "Hunter"
+}
+
+class ClassRoleView(View):
+    def __init__(self, member):
+        super().__init__(timeout=120)
+        self.member = member
+
+    @discord.ui.select(
+        placeholder="Choose your class",
+        min_values=1,
+        max_values=1,
+        options=[
+            discord.SelectOption(label=role, value=role)
+            for role in CLASS_ROLES
+        ],
+    )
+    async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user != self.member:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return
+        selected_class = select.values[0]
+        for class_name in CLASS_ROLES:
+            existing_role = discord.utils.get(interaction.guild.roles, name=class_name)
+            if existing_role and existing_role in self.member.roles:
+                try:
+                    await self.member.remove_roles(existing_role)
+                except Exception as e:
+                    logging.error(f"Failed to remove role {class_name} from {self.member.name}: {e}")
+        role = discord.utils.get(interaction.guild.roles, name=selected_class)
+        if role:
+            try:
+                await self.member.add_roles(role)
+                user_record = verified_users.get(str(self.member.id), {})
+                user_record["class_assigned"] = True
+                verified_users[str(self.member.id)] = user_record
+                save_verified(verified_users)
+            except discord.Forbidden:
+                await interaction.response.send_message("❌ Missing permissions to assign role.", ephemeral=True)
+                return
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Error assigning role: {e}", ephemeral=True)
+                return
+            await interaction.response.send_message(f"✅ {selected_class} role assigned!", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"Role `{selected_class}` not found.", ephemeral=True)
+
+async def prompt_for_class_role(member):
+    user_record = verified_users.get(str(member.id), {})
+    if user_record.get("class_assigned"):
+        return
+    onboarding_channel = discord.utils.get(member.guild.text_channels, name=ONBOARDING_CHANNEL)
+    if onboarding_channel:
+        has_class = any(discord.utils.get(member.roles, name=cls) for cls in CLASS_ROLES)
+        if not has_class:
+            class_prompt = await onboarding_channel.send(
+                f"{member.mention}, please select your class (react or use dropdown):",
+                view=ClassRoleView(member)
+            )
+            for emoji in CLASS_EMOJIS:
+                await class_prompt.add_reaction(emoji)
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    if payload.member is None or payload.member.bot:
+        return
+
+    guild = discord.utils.get(bot.guilds, id=payload.guild_id)
+    if not guild:
+        return
+
+    emoji = str(payload.emoji)
+    class_name = CLASS_EMOJIS.get(emoji)
+    if class_name:
+        member = guild.get_member(payload.user_id)
+        if not member:
+            return
+        role = discord.utils.get(guild.roles, name=class_name)
+        if role:
+            for class_name_existing in CLASS_ROLES:
+                existing_role = discord.utils.get(guild.roles, name=class_name_existing)
+                if existing_role and existing_role in member.roles:
+                    try:
+                        await member.remove_roles(existing_role)
+                    except Exception as e:
+                        logging.error(f"Failed to remove role {class_name_existing} from {member.name}: {e}")
+            if role not in member.roles:
+                try:
+                    await member.add_roles(role)
+                    user_record = verified_users.get(str(member.id), {})
+                    user_record["class_assigned"] = True
+                    verified_users[str(member.id)] = user_record
+                    save_verified(verified_users)
+                except discord.Forbidden:
+                    print(f"[ERROR] Missing permissions to assign role {role.name} to {member.display_name}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to assign role {role.name} to {member.display_name}: {e}")
+            onboarding_channel = discord.utils.get(guild.text_channels, name=ONBOARDING_CHANNEL)
+            if onboarding_channel:
+                await onboarding_channel.send(f"✅ {member.mention} assigned class role: {class_name}")
+
+@bot.event
+async def on_ready():
+    print(f"✅ Bot is online as {bot.user}")
+    for guild in bot.guilds:
+        for uid in verified_users:
+            member = guild.get_member(int(uid))
+            if member:
+                has_class = any(discord.utils.get(member.roles, name=cls) for cls in CLASS_ROLES)
+                if not has_class:
+                    await prompt_for_class_role(member)
+
 async def check_verification(member: discord.Member):
     flags = user_flags.get(member.id, {"rules": False, "nickname": False})
     print(f"[CHECK] Verifying {member.name}: {flags}")
@@ -212,13 +409,7 @@ async def check_verification(member: discord.Member):
     print(f"[SUCCESS] {member.name} is fully verified!")
 
     await log_verification_event(guild, member, "Full Verification Complete", flags)
-
-
-# === EVENTS ===
-@bot.event
-async def on_ready():
-    print(f"✅ Bot is online as {bot.user}")
-
+    await prompt_for_class_role(member)
 
 @bot.event
 async def on_member_join(member):
