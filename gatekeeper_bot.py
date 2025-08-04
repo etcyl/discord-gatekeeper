@@ -204,5 +204,32 @@ async def forceverify(ctx, member: discord.Member):
 async def verified(ctx):
     await ctx.send(f"Verified users: {list(verified_users.keys())}")
 
+@bot.event
+async def on_ready():
+    logging.info(f"✅ Bot is online as {bot.user}")
+    await sync_existing_verified_users()
+
+async def sync_existing_verified_users():
+    logging.info("[SYNC] Checking for existing members to auto-verify...")
+
+    for guild in bot.guilds:
+        member_role = discord.utils.get(guild.roles, name=MEMBER_ROLE)
+        if not member_role:
+            logging.warning(f"[SYNC] Member role '{MEMBER_ROLE}' not found in guild '{guild.name}'")
+            continue
+
+        for member in guild.members:
+            if member_role in member.roles and str(member.id) not in verified_users:
+                verified_users[str(member.id)] = True
+                logging.info(f"[SYNC] Auto-verified existing member: {member.name}")
+                try:
+                    await member.send("👋 You've been auto-verified based on your role.")
+                except Exception as e:
+                    logging.warning(f"[SYNC] Could not DM {member.name}: {e}")
+
+    save_verified(verified_users)
+    logging.info("[SYNC] Finished syncing existing members.")
+
+
 # === RUN BOT ===
 bot.run(TOKEN)
