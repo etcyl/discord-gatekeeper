@@ -784,6 +784,91 @@ async def resetclass(ctx, member: discord.Member = None):
         logging.error(f"[ERROR] Failed to reset class for {member.display_name if member else ctx.author.display_name}: {e}")
         await ctx.send("❌ An error occurred while resetting class selection.")
 
+# === COMMAND: COUNT RAIDERS ===
+@bot.command()
+async def count_raiders(ctx):
+    """
+    Count and display the number of members with the 'Raider' role.
+
+    Args:
+        ctx (commands.Context): The context of the command.
+    """
+    try:
+        raider_role = discord.utils.get(ctx.guild.roles, name="Raider")
+        if not raider_role:
+            await ctx.send("The 'Raider' role does not exist.")
+            return
+        raiders = [member for member in ctx.guild.members if raider_role in member.roles]
+        await ctx.send(f"There are {len(raiders)} members with the Raider role.")
+    except Exception as e:
+        logging.error(f"[ERROR] count_raiders failed: {e}")
+        await ctx.send("Failed to count Raider members.")
+
+# === COMMAND: COUNT MEMBERS ===
+@bot.command()
+async def count_members(ctx):
+    """
+    Count and display the number of members with the 'Guild Member' role.
+
+    Args:
+        ctx (commands.Context): The context of the command.
+    """
+    try:
+        member_role = discord.utils.get(ctx.guild.roles, name="Guild Member")
+        if not member_role:
+            await ctx.send("The 'Guild Member' role does not exist.")
+            return
+        members = [member for member in ctx.guild.members if member_role in member.roles]
+        await ctx.send(f"There are {len(members)} members with the Guild Member role.")
+    except Exception as e:
+        logging.error(f"[ERROR] count_members failed: {e}")
+        await ctx.send("Failed to count Guild Members.")
+
+# === COMMAND: LIST OFFICERS ===
+@bot.command()
+async def list_officers(ctx):
+    """
+    List all members with the 'Officer' role.
+
+    Args:
+        ctx (commands.Context): The context of the command.
+    """
+    try:
+        officer_role = discord.utils.get(ctx.guild.roles, name="Officer")
+        if not officer_role:
+            await ctx.send("The 'Officer' role does not exist.")
+            return
+        officers = [member.display_name for member in ctx.guild.members if officer_role in member.roles]
+        if officers:
+            officer_list = "\n".join(officers)
+            await ctx.send(f"**Officer List:**\n{officer_list}")
+        else:
+            await ctx.send("There are currently no officers assigned.")
+    except Exception as e:
+        logging.error(f"[ERROR] list_officers failed: {e}")
+        await ctx.send("Failed to list officers.")
+
+# === COMMAND: COUNT CLASS ===
+@bot.command()
+async def count_class(ctx, class_name: str):
+    """
+    Count how many members have a specific class role.
+
+    Args:
+        ctx (commands.Context): The context of the command.
+        class_name (str): The name of the class to count (e.g., 'Warrior').
+    """
+    try:
+        class_name = class_name.capitalize()
+        class_role = discord.utils.get(ctx.guild.roles, name=class_name)
+        if not class_role:
+            await ctx.send(f"Class role '{class_name}' does not exist.")
+            return
+        players = [member for member in ctx.guild.members if class_role in member.roles]
+        await ctx.send(f"There are {len(players)} members with the {class_name} class role.")
+    except Exception as e:
+        logging.error(f"[ERROR] count_class failed: {e}")
+        await ctx.send("Failed to count class members.")
 
 # === CLASS ROLE VIEW ===
 class ClassRoleView(View):
