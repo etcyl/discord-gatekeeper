@@ -49,6 +49,25 @@ Example:
 
 ADMIN/OWNER COMMANDS
 
+!gatesnapshot [filter]
+Who can use: Admins only
+What it does: Generates and logs a current onboarding gate snapshot for all members. Flags are color-coded with ✅ and ❌. If an optional filter is provided (verified or unverified), only that subset of members will be printed and logged, along with their join date if available.
+Example:
+!gatesnapshot → shows all members with full gate flags
+!gatesnapshot unverified → shows only unverified members
+
+!debuggate <@member>
+Who can use: Admins only
+What it does: Shows the gate flags and roles for a specific member, including rules acceptance, nickname confirmation, class assignment, verified status, and all roles they currently have.
+Example:
+!debuggate @chungus_amongus
+
+!fixgate
+Who can use: Admins only
+What it does: Re-runs the onboarding gate check for every member in the guild. This will attempt to promote any members who meet the verification criteria and demote any who do not. Logs all actions taken.
+Example:
+!fixgate
+
 !reassignalt \<alt\_name> <@member> <class>
 Who can use: Admins or bot owner
 What it does: Transfers an alt to another member and assigns a class.
