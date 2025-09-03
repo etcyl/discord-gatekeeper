@@ -860,19 +860,11 @@ async def on_raw_reaction_add(payload):
 async def on_ready():
     print(f"✅ Bot is online as {bot.user}")
 
-    # Register persistent views (already in your code)
-    try:
-        bot.add_view(VerificationView())
-        bot.add_view(ClassRoleView())
-    except Exception as e:
-        logging.error(f"[ERROR] add persistent views: {e}")
-
-    # Retro-verify any pre-existing Guild Members
+    # 🔁 Retro-verify any pre-existing Guild Members on startup
     for g in bot.guilds:
         await retro_verify_existing_members(g)
 
     # Register persistent views once per process
-    # These views are stateless and will handle presses across restarts
     try:
         bot.add_view(VerificationView())
         bot.add_view(ClassRoleView())
@@ -967,7 +959,7 @@ async def on_member_join(member):
             await send_onboarding_embed(member)
             await channel.send(
                 f"{member.mention} Please follow the instructions above:",
-                view=VerificationView(member)
+                view=VerificationView()
             )
             await prompt_for_class_role(member)
 
@@ -1137,9 +1129,8 @@ async def audit_snapshot(ctx: commands.Context, *args: str):
             return "✅" if ok else "❌"
 
         # --- parse args: filter + sort mode ---
-        # Filter: None (all), True (verified only), False (unverified only)
-        filter_mode = None
-        sort_alpha = False
+        filter_mode = None        # None (all), True (verified only), False (unverified only)
+        sort_alpha  = False       # default chronological by joined_at
         for a in args:
             s = a.strip().lower()
             if s in {"verified", "true", "yes", "y"}:
@@ -1151,34 +1142,64 @@ async def audit_snapshot(ctx: commands.Context, *args: str):
 
         guild = ctx.guild
         newcomer_role = discord.utils.get(guild.roles, name=NEWCOMER_ROLE)
-        member_role = discord.utils.get(guild.roles, name=MEMBER_ROLE)
+        member_role   = discord.utils.get(guild.roles, name=MEMBER_ROLE)
 
-        # Collect raw rows first so we can sort/filter consistently
+        # ------------------------------------------------------------
+        # PREPASS: if a member ALREADY has Guild Member, ensure stored
+        # flags (rules_accepted / nickname_confirmed) are True in DB.
+        # ------------------------------------------------------------
+        changed = 0
+        for m in guild.members:
+            if member_role and (member_role in m.roles):
+                uid = str(m.id)
+                rec = verified_users.get(uid, {}) or {}
+                to_update = False
+
+                if not rec.get("rules_accepted", False):
+                    rec["rules_accepted"] = True
+                    to_update = True
+                if not rec.get("nickname_confirmed", False):
+                    rec["nickname_confirmed"] = True
+                    to_update = True
+
+                if to_update:
+                    verified_users[uid] = rec
+                    changed += 1
+                    try:
+                        _audit(
+                            "snapshot_autoset_flags",
+                            m,
+                            set_rules_accepted=True,
+                            set_nickname_confirmed=True,
+                            had_member_role=True
+                        )
+                    except Exception:
+                        pass
+
+        if changed:
+            save_verified()  # persist the batch of fixes
+
+        # ------------------------------------------------------------
+        # Build snapshot rows (now using the updated stored flags)
+        # ------------------------------------------------------------
         rows = []
         for m in guild.members:
             uid = str(m.id)
             rec = verified_users.get(uid, {})
 
+            is_newcomer = (newcomer_role in m.roles) if newcomer_role else False
+            is_member   = (member_role in m.roles) if member_role else False
+
+            # Read stored flags AFTER pre-fix
             rules_ok = bool(rec.get("rules_accepted"))
-            # Only use the "clicked" flag; do NOT validate nickname format right now.
-            nick_ok = bool(rec.get("nickname_confirmed"))
+            nick_ok  = bool(rec.get("nickname_confirmed"))
 
-            # If you ever want to enforce policy again, uncomment below:
-            # try:
-            #     nick_ok = nick_ok and nickname_meets_policy(m.display_name)
-            # except Exception:
-            #     try:
-            #         nick_ok = nick_ok and is_valid_wow_nickname(m.display_name)
-            #     except Exception:
-            #         pass
-
+            # Class: either the stored flag OR actually having a class role
             has_class_role = any(r.name in CLASS_ROLES for r in m.roles)
             class_ok = bool(rec.get("class_assigned")) or has_class_role
 
-            is_newcomer = (newcomer_role in m.roles) if newcomer_role else False
-            is_member = (member_role in m.roles) if member_role else False
             verified_flag = bool(rec.get("verified"))
-            gate_ready = rules_ok and nick_ok and class_ok
+            gate_ready    = rules_ok and nick_ok and class_ok
 
             rows.append({
                 "member": m,
@@ -1227,33 +1248,34 @@ async def audit_snapshot(ctx: commands.Context, *args: str):
             guild_name=guild.name,
             invoked_by=ctx.author.id,
             filter=("verified" if filter_mode is True else "unverified" if filter_mode is False else "all"),
-            sort=("alpha" if sort_alpha else "chronological")
+            sort=("alpha" if sort_alpha else "chronological"),
+            prepass_autofixed=changed
         )
 
         # Build channel output
         sort_label = "alphabetical" if sort_alpha else "chronological"
         header = f"{'Member':<24} | {'Joined':<10} | Rules | Nick | Class | Verified | Newcomer | GuildMem | GateReady"
         sep = "-" * len(header)
-        channel_lines = [f"[slice={('verified' if filter_mode is True else 'unverified' if filter_mode is False else 'all')}, sort={sort_label}]", header, sep]
+        channel_lines = [f"[slice={('verified' if filter_mode is True else 'unverified' if filter_mode is False else 'all')}, sort={sort_label}, autofixed={changed}]", header, sep]
 
         # Emit per-member + accumulate totals
         for r in rows:
             m = r["member"]
-            rules_ok = r["rules_ok"]
-            nick_ok = r["nick_ok"]
-            class_ok = r["class_ok"]
+            rules_ok    = r["rules_ok"]
+            nick_ok     = r["nick_ok"]
+            class_ok    = r["class_ok"]
             is_newcomer = r["is_newcomer"]
-            is_member = r["is_member"]
-            verified_flag = r["verified"]
-            gate_ready = r["gate_ready"]
-            joined_at = r["joined_at"]
+            is_member   = r["is_member"]
+            verified_f  = r["verified"]
+            gate_ready  = r["gate_ready"]
+            joined_at   = r["joined_at"]
 
             totals["members_total"] += 1
             if is_newcomer:
                 totals["newcomers"] += 1
             if is_member:
                 totals["guild_members"] += 1
-            if verified_flag:
+            if verified_f:
                 totals["verified_true"] += 1
             if gate_ready and not is_member:
                 totals["gate_ready_not_promoted"] += 1
@@ -1272,7 +1294,7 @@ async def audit_snapshot(ctx: commands.Context, *args: str):
                 rules_ok=rules_ok,
                 nickname_ok=nick_ok,
                 class_ok=class_ok,
-                verified=verified_flag,
+                verified=verified_f,
                 newcomer=is_newcomer,
                 guild_member=is_member,
                 gate_ready=gate_ready,
@@ -1290,7 +1312,7 @@ async def audit_snapshot(ctx: commands.Context, *args: str):
             channel_lines.append(
                 f"{m.display_name:<24} | {joined_str:<10} | "
                 f"{flag(rules_ok)}   | {flag(nick_ok)}  | {flag(class_ok)}   | "
-                f"{flag(verified_flag)}      | {flag(is_newcomer)}       | {flag(is_member)}     | {flag(gate_ready)}"
+                f"{flag(verified_f)}      | {flag(is_newcomer)}       | {flag(is_member)}     | {flag(gate_ready)}"
             )
 
         # End audit block
@@ -1303,7 +1325,7 @@ async def audit_snapshot(ctx: commands.Context, *args: str):
         # Send audit log confirmation + totals
         await ctx.send(
             "📘 Snapshot written to `guild_audit.log` "
-            f"(slice: **{slice_label}**, sort: **{sort_label}**).\n"
+            f"(slice: **{slice_label}**, sort: **{sort_label}**, autofixed: **{changed}**).\n"
             f"Total in slice: {totals['members_total']} | "
             f"Newcomers: {totals['newcomers']} | "
             f"Guild Members: {totals['guild_members']} | "
@@ -1311,7 +1333,6 @@ async def audit_snapshot(ctx: commands.Context, *args: str):
             f"Gate ready (not promoted): {totals['gate_ready_not_promoted']}"
         )
 
-        # If the slice is empty, say so
         if totals["members_total"] == 0:
             await ctx.send("ℹ️ No members matched the requested filter.")
             return
@@ -1330,6 +1351,7 @@ async def audit_snapshot(ctx: commands.Context, *args: str):
             except Exception:
                 pass
         await ctx.send("❌ Failed to write audit snapshot. Check logs.")
+
 
 async def retro_verify_existing_members(guild: discord.Guild) -> None:
     """
@@ -1362,18 +1384,18 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
             has_newcomer_role = newcomer_role in m.roles if newcomer_role else False
             has_any_class_role = any(r.name in CLASS_ROLES for r in m.roles)
 
-            # Case A: Member has Guild Member role but is not verified in DB -> mark verified + fill flags.
+            # A) Already Guild Member but not verified in DB -> mark as verified and fill flags.
             if has_member_role and not rec.get("verified", False):
                 rec["verified"] = True
                 rec["rules_accepted"] = True
                 rec["nickname_confirmed"] = True
                 if has_any_class_role:
-                    rec["class_assigned"] = True
+                    rec["class_assigned"] = True  # reflect existing class role
                 verified_users[uid] = rec
-                save_verified()  # persist this change
+                save_verified()  # persist change
                 total_updated_db += 1
 
-                # If they also still have Newcomer, remove it.
+                # If they still have Newcomer, remove it.
                 if has_newcomer_role:
                     try:
                         await m.remove_roles(newcomer_role, reason="Retro-verify: already Guild Member")
@@ -1381,8 +1403,7 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
                     except Exception as e:
                         logging.error(f"[RETROVERIFY] Failed removing Newcomer from {m}: {e}")
 
-                # Nothing to add here; they already have Member role.
-
+                # Log
                 try:
                     audit(
                         "retro_verify_member",
@@ -1397,9 +1418,9 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
                     )
                 except Exception:
                     pass
-                continue  # next member
+                continue
 
-            # Case B: Member is verified in DB but lacks Guild Member role -> grant it now.
+            # B) Verified in DB but missing Guild Member role -> grant it now.
             if rec.get("verified", False) and not has_member_role:
                 try:
                     await m.add_roles(member_role, reason="Retro-verify: verified but missing Guild Member")
@@ -1407,7 +1428,7 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
                 except Exception as e:
                     logging.error(f"[RETROVERIFY] Failed adding Guild Member to {m}: {e}")
 
-                # If they still have Newcomer, remove it.
+                # Remove Newcomer if present.
                 if has_newcomer_role:
                     try:
                         await m.remove_roles(newcomer_role, reason="Retro-verify: verified user cleanup")
@@ -1426,10 +1447,9 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
                     )
                 except Exception:
                     pass
-                continue  # next member
+                continue
 
-            # Case C: Already consistent (either verified+member, or unverified+no member)
-            # If they are verified+member and still have Newcomer -> cleanup.
+            # C) Consistent: verified + member (clean up stray Newcomer), or unverified + no member.
             if rec.get("verified", False) and has_member_role and has_newcomer_role:
                 try:
                     await m.remove_roles(newcomer_role, reason="Retro-verify: cleanup for verified member")
@@ -1468,6 +1488,7 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
             audit("retro_verify_error", None, guild_id=guild.id, error=str(e))
         except Exception:
             pass
+
 
 
 
