@@ -8,6 +8,7 @@
 #
 # Requires: discord.py 2.x, matplotlib, python-dotenv
 
+import asyncio
 import os
 import io
 import csv
@@ -17,7 +18,9 @@ import time
 import re
 from datetime import datetime, timezone
 from typing import Dict, Optional
-
+import sys
+import queue
+from logging.handlers import QueueHandler, QueueListener
 import discord
 from discord.ext import commands
 from discord.ui import View, Button, Select
@@ -85,13 +88,14 @@ logging.basicConfig(
 AUDIT_LOG_FILE = "guild_audit.log"
 
 def _ensure_audit_logger():
+    global _audit_listener
     logger = logging.getLogger("guild_audit")
     if logger.handlers:
         return logger  # already configured
 
     logger.setLevel(logging.INFO)
 
-    # File handler
+    # File handler (UTF-8, safe for emoji)
     fh = logging.FileHandler(AUDIT_LOG_FILE, encoding="utf-8")
     fh.setLevel(logging.INFO)
     fh.setFormatter(logging.Formatter(
@@ -99,16 +103,30 @@ def _ensure_audit_logger():
         datefmt="%Y-%m-%d %H:%M:%S"
     ))
 
-    # Console handler (useful while testing)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(logging.Formatter(
-        fmt="%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%H:%M:%S"
-    ))
+    # Non-blocking queue path
+    q = queue.SimpleQueue()
+    qh = QueueHandler(q)
+    logger.addHandler(qh)
 
-    logger.addHandler(fh)
-    logger.addHandler(ch)
+    # Listener writes records to the file handler on a separate thread
+    _audit_listener = QueueListener(q, fh, respect_handler_level=True)
+    _audit_listener.daemon = True
+    _audit_listener.start()
+
+    # Optional console mirror ONLY if the console is UTF-8 (e.g., Windows Terminal with UTF-8)
+    try:
+        if sys.stderr and sys.stderr.encoding and "UTF-8" in sys.stderr.encoding.upper():
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.INFO)
+            ch.setFormatter(logging.Formatter(
+                fmt="%(asctime)s | %(levelname)s | %(message)s",
+                datefmt="%H:%M:%S"
+            ))
+            logger.addHandler(ch)
+    except Exception:
+        # If the console isn’t UTF-8, just skip adding a console handler
+        pass
+
     return logger
 
 _audit = _ensure_audit_logger()
@@ -1617,11 +1635,13 @@ async def setmainfor(ctx, member: discord.Member, main_name: str, main_class: st
 
 @bot.command()
 async def classstats(ctx):
+    import asyncio
     try:
         class_members = {cls: [] for cls in CLASS_ROLES}
         all_members_combined = {cls: [] for cls in CLASS_ROLES}
         is_alt_flags = {}
 
+        # Build class/member maps from your alts_data
         for uid, record in alts_data.items():
             main_name = record.get("main")
             main_class = record.get("class")
@@ -1635,6 +1655,7 @@ async def classstats(ctx):
                     all_members_combined[alt_class].append(alt_name)
                     is_alt_flags[alt_name] = True
 
+        # Add members that have class roles but aren't in alts_data
         for guild in bot.guilds:
             for member in guild.members:
                 class_role = next((role.name for role in member.roles if role.name in CLASS_ROLES), None)
@@ -1648,6 +1669,7 @@ async def classstats(ctx):
             await ctx.send("📊 No class roles assigned yet.")
             return
 
+        # Text summary (kept lightweight per message)
         summary_lines = ["**Vindicated's Class Composition**"]
         for cls in sorted(class_members):
             members = sorted(class_members[cls], key=lambda x: x.lower())
@@ -1656,13 +1678,24 @@ async def classstats(ctx):
         for part in summary_lines:
             await ctx.send(part)
 
+        # Bar chart data
         labels = [cls for cls in CLASS_ROLES if len(all_members_combined[cls]) > 0]
         mains_count = [len([m for m in all_members_combined[cls] if not is_alt_flags.get(m, False)]) for cls in labels]
-        alts_count = [len([m for m in all_members_combined[cls] if is_alt_flags.get(m, False)]) for cls in labels]
+        alts_count  = [len([m for m in all_members_combined[cls] if     is_alt_flags.get(m, False)]) for cls in labels]
 
-        if mains_count or alts_count:
+        if not labels:
+            return
+
+        # Helper that builds the PNG in a background thread
+        def _build_class_plot_png(labels, mains_count, alts_count):
+            import io
+            import matplotlib
+            matplotlib.use("Agg")  # headless backend
+            import matplotlib.pyplot as plt
+
             x = range(len(labels))
             plt.figure(figsize=(8, 6))
+            # Colors optional; keep if you like, or omit for defaults
             plt.bar(x, mains_count, label='Mains', color='skyblue')
             plt.bar(x, alts_count, bottom=mains_count, label='Alts', color='orange')
             plt.title("Vindicated Full Class Composition (Mains + Alts)")
@@ -1676,12 +1709,18 @@ async def classstats(ctx):
             plt.savefig(buffer, format='png')
             buffer.seek(0)
             plt.close()
+            return buffer
 
-            file = File(fp=buffer, filename="full_class_composition.png")
-            await ctx.send(file=file)
+        # Offload plotting + PNG save so we don't block the event loop/heartbeat
+        buffer = await asyncio.to_thread(_build_class_plot_png, labels, mains_count, alts_count)
+
+        file = File(fp=buffer, filename="full_class_composition.png")
+        await ctx.send(file=file)
+
     except Exception as e:
-        logging.error(f"[ERROR] classstats: {e}")
+        logging.error(f"[ERROR] classstats: {e}", exc_info=True)
         await ctx.send("❌ Error generating class stats.")
+
 
 @bot.command()
 async def addalt(ctx, alt_name: str, *, alt_class: str = None):
