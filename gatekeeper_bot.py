@@ -34,6 +34,9 @@ from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
+VISITOR_ROLE = "Visitor"  # the “just visiting” role
+DEFAULT_TRACK = "member"  # keep existing default behavior
+VALID_TRACKS = {"member", "visitor"}
 NEWCOMER_ROLE = "Newcomer"
 MEMBER_ROLE = "Guild Member"
 ONBOARDING_CHANNEL = "onboarding"
@@ -390,43 +393,41 @@ async def register_raid_mirror(bot: commands.Bot) -> None:
     await bot.add_cog(CurrentWeekRaidMirror(bot))
 
 # =========================
-# ONBOARDING / VERIFICATION
+# ONBOARDING / VERIFICATION UI
 # =========================
 async def send_onboarding_embed(member: discord.Member):
+    """
+    Posts the onboarding message with a track choice (member vs visitor)
+    and the persistent VerificationView (track buttons + verify buttons + class select).
+    """
     try:
         onboarding_channel = discord.utils.get(member.guild.text_channels, name=ONBOARDING_CHANNEL)
+        if not onboarding_channel:
+            return
+
         embed = discord.Embed(
             title="Welcome to Vindicated!",
-            description="Follow these steps to get verified and join the guild chat.",
+            description=(
+                "Choose your track below:\n"
+                "• **I’m joining the guild** → you’ll become **Guild Member** after onboarding.\n"
+                "• **I’m just visiting** → you’ll become **Visitor** after onboarding.\n\n"
+                "Then complete these steps:\n"
+                "1) Update your **server nickname** to your main WoW character\n"
+                "2) **Accept the rules**\n"
+                "3) **Confirm nickname**\n"
+                "4) **Choose your class**"
+            ),
             color=discord.Color.blue()
         )
-        embed.add_field(
-            name="1) Update Your Server Nickname",
-            value=(
-                "Set your **server nickname** to your **main WoW character name**.\n"
-                "**Right-click your name → Edit Server Profile → Nickname**."
-            ),
-            inline=False
+
+        await onboarding_channel.send(
+            content=f"{member.mention}",
+            embed=embed,
+            view=VerificationView()  # persistent, includes track + verify + class select
         )
-        embed.add_field(
-            name="2) Accept the Rules",
-            value="Click the green button below to accept the rules. Read #rules first.",
-            inline=False
-        )
-        embed.add_field(
-            name="3) Confirm Nickname Change",
-            value="Click the blue button to confirm you've updated your nickname.",
-            inline=False
-        )
-        embed.add_field(
-            name="4) Choose Your Class",
-            value="Use the dropdown under this message or react with your class emoji.",
-            inline=False
-        )
-        if onboarding_channel:
-            await onboarding_channel.send(content=f"{member.mention}", embed=embed)
     except Exception as e:
         logging.error(f"[ERROR] send_onboarding_embed: {e}")
+
 
 # ---------- Persistent Verification View (stateless) ----------
 # Buttons use fixed custom_id values; they do not capture 'member'.
@@ -435,38 +436,126 @@ async def send_onboarding_embed(member: discord.Member):
 class VerificationView(View):
     """
     Persistent, stateless verification UI.
-    Uses fixed custom_id values so buttons keep working across restarts.
-    Persists state in verified_users; no user_flags dependency.
+    Includes:
+      - Track selection: member vs visitor
+      - Accept Rules button
+      - Confirm Nickname button
+      - Class dropdown (via ClassRoleSelect)
+    Persists state in `verified_users[uid]`.
+
+    UPDATE: Track buttons are now gated to *new users only* to prevent
+    verified users from flipping roles later.
     """
     def __init__(self):
-        super().__init__(timeout=None)  # persistent view
+        super().__init__(timeout=None)
+        # Put the class selector on the same message for a single-stop UI.
+        self.add_item(ClassRoleSelect())
 
-    # --- helpers (local) ---
+    # --- helpers ---
     @staticmethod
     def _nickname_ok(display_name: str) -> bool:
-        # Prefer nickname_meets_policy if defined; else fallback to is_valid_wow_nickname; else allow.
         try:
-            return nickname_meets_policy(display_name)  # type: ignore[name-defined]
+            return nickname_meets_policy(display_name)  # optional stricter policy
         except Exception:
             try:
-                return is_valid_wow_nickname(display_name)  # type: ignore[name-defined]
+                return is_valid_wow_nickname(display_name)
             except Exception:
                 return True
 
     @staticmethod
-    def _audit(event: str, member: discord.abc.User, **fields):
-        # Safe audit: only call if an audit() helper exists
+    def _audit(event: str, member: discord.abc.User | None, **fields):
         fn = globals().get("audit", None)
         if callable(fn):
             try:
                 fn(event, member, **fields)
             except Exception:
-                pass  # never break UX due to logging
+                pass
+
+    @staticmethod
+    def _set_track(uid: str, track: str):
+        rec = verified_users.get(uid, {}) or {}
+        rec["track"] = track if track in VALID_TRACKS else DEFAULT_TRACK
+        verified_users[uid] = rec
+        save_verified()
+
+    @staticmethod
+    def _is_new_user(member: discord.Member) -> bool:
+        """
+        New user = not verified yet AND either:
+          - currently has Newcomer, OR
+          - has neither Guild Member nor Visitor.
+        """
+        rec = verified_users.get(str(member.id), {})
+        has_newcomer = any(r.name == NEWCOMER_ROLE for r in member.roles)
+        has_track_role = any(r.name in (MEMBER_ROLE, VISITOR_ROLE) for r in member.roles)
+        return (not rec.get("verified")) and (has_newcomer or not has_track_role)
+
+    # ---------- TRACK: Member ----------
+    @discord.ui.button(
+        label="🛡 I’m joining the guild",
+        style=discord.ButtonStyle.primary,
+        custom_id="track:member"
+    )
+    async def choose_member_track(self, interaction: discord.Interaction, button: Button):
+        try:
+            user = interaction.user
+            if not self._is_new_user(user):
+                await interaction.response.send_message(
+                    "Track selection is only available for newcomers. "
+                    "If you need a change, please ping an officer.",
+                    ephemeral=True
+                )
+                self._audit("track_select_blocked", user, attempted="member")
+                return
+
+            uid = str(user.id)
+            self._set_track(uid, "member")
+            await interaction.response.send_message(
+                "Track set: **Guild Member**. Complete the steps to be promoted to **Guild Member**.",
+                ephemeral=True
+            )
+            self._audit("track_selected", user, track="member")
+            await log_verification_event(interaction.guild, user, "Selected Track", {"track": "member"})
+            await check_verification(user)
+        except Exception as e:
+            logging.error(f"[ERROR] choose_member_track: {e}")
+            self._audit("track_select_error", interaction.user, error=str(e))
+
+    # ---------- TRACK: Visitor ----------
+    @discord.ui.button(
+        label="👋 I’m just visiting",
+        style=discord.ButtonStyle.secondary,
+        custom_id="track:visitor"
+    )
+    async def choose_visitor_track(self, interaction: discord.Interaction, button: Button):
+        try:
+            user = interaction.user
+            if not self._is_new_user(user):
+                await interaction.response.send_message(
+                    "Track selection is only available for newcomers. "
+                    "If you need a change, please ping an officer.",
+                    ephemeral=True
+                )
+                self._audit("track_select_blocked", user, attempted="visitor")
+                return
+
+            uid = str(user.id)
+            self._set_track(uid, "visitor")
+            await interaction.response.send_message(
+                "Track set: **Visitor**. Complete the steps to be promoted to **Visitor**.",
+                ephemeral=True
+            )
+            self._audit("track_selected", user, track="visitor")
+            await log_verification_event(interaction.guild, user, "Selected Track", {"track": "visitor"})
+            await check_verification(user)
+        except Exception as e:
+            logging.error(f"[ERROR] choose_visitor_track: {e}")
+            self._audit("track_select_error", interaction.user, error=str(e))
 
     # ---------- BUTTON: Accept Rules ----------
     @discord.ui.button(
         label="✅ I Accept the Rules",
-        style=discord.ButtonStyle.green,
+        style=discord.ButtonStyle.success,
         custom_id="verify:accept_rules"
     )
     async def accept_rules(self, interaction: discord.Interaction, button: Button):
@@ -484,16 +573,12 @@ class VerificationView(View):
 
             rec["rules_accepted"] = True
             verified_users[uid] = rec
-            # save_verified() signature varies across versions; call with no args per your snippet
-            save_verified()  # if your helper requires an arg, use: save_verified(verified_users)
+            save_verified()
 
             await interaction.response.send_message("✅ Rules accepted!", ephemeral=True)
             self._audit("rules_accepted", user)
 
-            # Optional channel log (keeps your existing behavior)
             await log_verification_event(interaction.guild, user, "Accepted Rules", rec)
-
-            # Run the final gate to promote to Guild Member if ready
             await check_verification(user)
         except Exception as e:
             logging.error(f"[ERROR] accept_rules: {e}")
@@ -501,8 +586,8 @@ class VerificationView(View):
 
     # ---------- BUTTON: Confirm Nickname ----------
     @discord.ui.button(
-        label="🏷 I Updated My Nickname",
-        style=discord.ButtonStyle.blurple,
+        label="✅ I Updated My Nickname",
+        style=discord.ButtonStyle.primary,
         custom_id="verify:confirm_nickname"
     )
     async def confirm_nickname(self, interaction: discord.Interaction, button: Button):
@@ -519,25 +604,24 @@ class VerificationView(View):
                 self._audit("nickname_click_already_verified", user, display=display)
                 return
 
-            #if not self._nickname_ok(display):
-                #await interaction.response.send_message(
-                    #"Your nickname doesn't match the required format. "
-                    #"Please set it to your **main WoW character name** and try again.",
-                    #ephemeral=True
-                #)
-                #self._audit("nickname_invalid", user, display=display)
-                #return
+            # Optional policy gate:
+            # if not self._nickname_ok(display):
+            #     await interaction.response.send_message(
+            #         "Your nickname doesn't match the required format. "
+            #         "Please set it to your **main WoW character name** and try again.",
+            #         ephemeral=True
+            #     )
+            #     self._audit("nickname_invalid", user, display=display)
+            #     return
 
             rec["nickname_confirmed"] = True
             verified_users[uid] = rec
-            save_verified()  # if your helper requires an arg, use: save_verified(verified_users)
+            save_verified()
 
             await interaction.response.send_message("🏷 Nickname confirmed!", ephemeral=True)
             self._audit("nickname_confirmed", user, display=display)
 
             await log_verification_event(interaction.guild, user, "Confirmed Nickname", rec)
-
-            # Run the final gate to promote to Guild Member if ready
             await check_verification(user)
         except Exception as e:
             logging.error(f"[ERROR] confirm_nickname: {e}")
@@ -591,53 +675,6 @@ class ClassRoleSelect(Select):
             logging.error(f"[ERROR] class select: {e}")
             await interaction.response.send_message(f"❌ Error assigning role: {e}", ephemeral=True)
 
-class ClassRoleView(View):
-    def __init__(self, member: discord.Member | None = None):
-        # timeout=None keeps it persistent
-        super().__init__(timeout=None)
-        self.member = member  # will be set later if not provided
-
-    @discord.ui.select(
-        placeholder="Select your class",
-        options=[
-            discord.SelectOption(label="Druid"),
-            discord.SelectOption(label="Hunter"),
-            discord.SelectOption(label="Mage"),
-            discord.SelectOption(label="Paladin"),
-            discord.SelectOption(label="Priest"),
-            discord.SelectOption(label="Rogue"),
-            discord.SelectOption(label="Shaman"),
-            discord.SelectOption(label="Warlock"),
-            discord.SelectOption(label="Warrior")
-        ],
-        custom_id="classrole:select_class"
-    )
-    async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
-        try:
-            # If persistent view loaded without member, set it now
-            if self.member is None:
-                self.member = interaction.user
-
-            selected_class = select.values[0]
-            guild = interaction.guild
-            role = discord.utils.get(guild.roles, name=selected_class)
-            if role:
-                await self.member.add_roles(role)
-                user_record = verified_users.get(str(self.member.id), {})
-                user_record["class_assigned"] = True
-                verified_users[str(self.member.id)] = user_record
-                save_verified(verified_users)
-                await interaction.response.send_message(f"✅ {selected_class} role assigned!", ephemeral=True)
-                logging.info(f"[INFO] {self.member} assigned class role {selected_class}")
-                await check_verification(self.member)
-            else:
-                await interaction.response.send_message(f"Role `{selected_class}` not found.", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.response.send_message("I don't have permission to assign that role.", ephemeral=True)
-        except Exception as e:
-            logging.error(f"[ERROR] select_callback: {e}")
-
-
 
 # ---------- Verification logging ----------
 async def log_verification_event(guild: discord.Guild, member: discord.Member, action: str, flags: dict):
@@ -658,53 +695,89 @@ async def log_verification_event(guild: discord.Guild, member: discord.Member, a
     except Exception as e:
         logging.error(f"[ERROR] log_verification_event: {e}")
 
-# ---------- Final gate ----------
+# =========================
+# FINAL GATE (track-aware)
+# =========================
 async def check_verification(member: discord.Member) -> None:
     """
-    Promote a user to 'Guild Member' when all onboarding steps are clicked:
+    Promote a user after onboarding based on selected track:
+      track == "member"  -> add Guild Member
+      track == "visitor" -> add Visitor
+    Steps required:
       - rules_accepted
-      - nickname_confirmed   (no format validation here)
-      - class_assigned OR an existing class role
-    Removes 'Newcomer', adds 'Guild Member', sets verified=True, logs, and persists.
+      - nickname_confirmed
+      - class_assigned OR already has a class role
+    Always removes Newcomer on success. Persists verified flag.
+
+    UPDATE: Only performs promotion/track-based role changes for *newcomers* or
+    users who are not yet verified. This prevents verified users from flipping
+    between Visitor/Guild Member by pressing buttons later.
     """
     try:
         uid = str(member.id)
         rec = verified_users.get(uid, {}) or {}
 
-        # Only honor the user's button/select clicks; do NOT validate nickname format here.
         rules_ok = bool(rec.get("rules_accepted"))
         nick_ok  = bool(rec.get("nickname_confirmed"))
         class_ok = bool(rec.get("class_assigned")) or any(r.name in CLASS_ROLES for r in member.roles)
 
-        # Optional structured audit if you added `audit()`
-        try:
-            audit("onboard_gate_check",
-                  member,
-                  rules_ok=rules_ok, nick_ok=nick_ok, class_ok=class_ok,
-                  currently_verified=bool(rec.get("verified")),
-                  roles=[r.name for r in member.roles])
-        except Exception:
-            pass
-
-        if not (rules_ok and nick_ok and class_ok):
-            return  # not ready yet
+        track = rec.get("track", DEFAULT_TRACK)
+        if track not in VALID_TRACKS:
+            track = DEFAULT_TRACK
 
         guild = member.guild
         newcomer_role = discord.utils.get(guild.roles, name=NEWCOMER_ROLE)
         member_role   = discord.utils.get(guild.roles, name=MEMBER_ROLE)
+        visitor_role  = discord.utils.get(guild.roles, name=VISITOR_ROLE)
 
+        is_newcomer = (newcomer_role in member.roles) if newcomer_role else False
+        is_already_verified = bool(rec.get("verified"))
+        allow_promotion = is_newcomer or not is_already_verified
+
+        try:
+            audit(
+                "onboard_gate_check",
+                member,
+                rules_ok=rules_ok,
+                nick_ok=nick_ok,
+                class_ok=class_ok,
+                track=track,
+                currently_verified=is_already_verified,
+                allow_promotion=allow_promotion,
+                roles=[r.name for r in member.roles]
+            )
+        except Exception:
+            pass
+
+        # Not ready or not allowed to change anything → stop.
+        if not (rules_ok and nick_ok and class_ok):
+            return
+        if not allow_promotion:
+            return
+
+        target_role_name = MEMBER_ROLE if track == "member" else VISITOR_ROLE
+        target_role = member_role if track == "member" else visitor_role
+        other_role  = visitor_role if track == "member" else member_role
+
+        added_target = False
         removed_newcomer = False
-        added_member     = False
 
-        # Ensure Guild Member role present
-        if member_role and member_role not in member.roles:
+        # Add target role if missing
+        if target_role and target_role not in member.roles:
             try:
-                await member.add_roles(member_role, reason="Completed onboarding")
-                added_member = True
+                await member.add_roles(target_role, reason=f"Completed onboarding ({track})")
+                added_target = True
             except Exception as e:
-                logging.error(f"[ERROR] add Guild Member to {member}: {e}")
+                logging.error(f"[ERROR] add {target_role_name} to {member}: {e}")
 
-        # Ensure Newcomer role removed
+        # Ensure the opposite track role is not lingering
+        if other_role and other_role in member.roles:
+            try:
+                await member.remove_roles(other_role, reason="Switching onboarding track")
+            except Exception as e:
+                logging.error(f"[ERROR] remove other track role from {member}: {e}")
+
+        # Remove Newcomer if present
         if newcomer_role and newcomer_role in member.roles:
             try:
                 await member.remove_roles(newcomer_role, reason="Completed onboarding")
@@ -712,30 +785,33 @@ async def check_verification(member: discord.Member) -> None:
             except Exception as e:
                 logging.error(f"[ERROR] remove Newcomer from {member}: {e}")
 
-        # Persist verification flag
+        # Persist verified flag
         if not rec.get("verified"):
             rec["verified"] = True
             verified_users[uid] = rec
-            save_verified()  # your helper persists the global dict
+            save_verified()
 
-        # Channel notice (optional)
+        # Channel notice
         onboarding_channel = discord.utils.get(guild.text_channels, name=ONBOARDING_CHANNEL)
-        if onboarding_channel and (added_member or removed_newcomer):
+        if onboarding_channel and (added_target or removed_newcomer):
             try:
                 await onboarding_channel.send(
-                    f"🎉 {member.mention} has completed onboarding and is now a **{MEMBER_ROLE}**!"
+                    f"🎉 {member.mention} has completed onboarding and is now a **{target_role_name}**!"
                 )
             except Exception:
                 pass
 
-        # Audit log
+        # Audit
         try:
-            audit("onboard_promoted",
-                  member,
-                  added_member=added_member,
-                  removed_newcomer=removed_newcomer,
-                  verified=True,
-                  roles=[r.name for r in member.roles])
+            audit(
+                "onboard_promoted",
+                member,
+                track=track,
+                added_role=target_role_name,
+                removed_newcomer=removed_newcomer,
+                verified=True,
+                roles=[r.name for r in member.roles]
+            )
         except Exception:
             pass
 
@@ -758,13 +834,14 @@ async def prompt_for_class_role(member: discord.Member):
         if onboarding_channel:
             has_class = any(discord.utils.get(member.roles, name=cls) for cls in CLASS_ROLES)
             if not has_class:
+                v = View(timeout=None)
+                v.add_item(ClassRoleSelect())  # reuse the persistent select with the same custom_id
                 msg = await onboarding_channel.send(
                     f"{member.mention}, please select your class (dropdown or reactions):",
-                    view=ClassRoleView()
+                    view=v
                 )
                 # Add custom emoji reactions by name if present in the guild
                 for key, mapped_class in CLASS_EMOJIS.items():
-                    # Only consider keys that look like emoji names (alphabetic) — skip unicode here
                     if key.isalpha():
                         emoji_obj = discord.utils.get(member.guild.emojis, name=key)
                         if emoji_obj:
@@ -774,6 +851,7 @@ async def prompt_for_class_role(member: discord.Member):
                                 logging.warning(f"[WARN] Could not add reaction for {key}: {e}")
     except Exception as e:
         logging.error(f"[ERROR] prompt_for_class_role: {e}")
+
 
 # =========================
 # REACTION HANDLER (robust)
@@ -884,8 +962,8 @@ async def on_ready():
 
     # Register persistent views once per process
     try:
+        # Only the canonical verification view (includes ClassRoleSelect)
         bot.add_view(VerificationView())
-        bot.add_view(ClassRoleView())
     except Exception as e:
         logging.error(f"[ERROR] add persistent views: {e}")
 
@@ -899,22 +977,6 @@ async def on_ready():
             for g in bot.guilds:
                 await cog.refresh_all_mirrors(g)
 
-    # Re-prompt class & verification UI for anyone still unverified
-    #for guild in bot.guilds:
-        #for uid, rec in list(verified_users.items()):
-            #if not rec.get("verified"):
-                #member = guild.get_member(int(uid))
-                #if member:
-                    #await prompt_for_class_role(member)
-                    #ch = discord.utils.get(guild.text_channels, name=ONBOARDING_CHANNEL)
-                    #if ch:
-                        #try:
-                            #await ch.send(
-                               #f"{member.mention} Please follow the instructions and click the buttons below:",
-                               # view=VerificationView()
-                            #)
-                        #except Exception as e:
-                            #logging.error(f"[ERROR] repost verification UI: {e}")
 
 @bot.command()
 @commands.has_permissions(manage_guild=True)
@@ -924,10 +986,18 @@ async def onboardstatus(ctx, member: discord.Member = None):
         member = member or ctx.author
         uid = str(member.id)
         rec = verified_users.get(uid, {})
-        legacy = user_flags.get(member.id, {"rules": False, "nickname": False})
+        track = rec.get("track", DEFAULT_TRACK)
+        # If you still want legacy flags, define user_flags = {} somewhere, or guard like below:
+        legacy = {}
+        try:
+            legacy = user_flags.get(member.id, {"rules": False, "nickname": False})  # type: ignore[name-defined]
+        except Exception:
+            legacy = {"rules": False, "nickname": False}
+
         has_class = any(discord.utils.get(member.roles, name=cls) for cls in CLASS_ROLES)
         await ctx.send(
             "Onboarding status for {}:\n"
+            "- track: {}\n"
             "- rules_accepted: {}\n"
             "- nickname_confirmed: {}\n"
             "- class_assigned: {}\n"
@@ -935,6 +1005,7 @@ async def onboardstatus(ctx, member: discord.Member = None):
             "- verified: {}\n"
             "- roles: {}".format(
                 member.display_name,
+                track,
                 rec.get("rules_accepted", False),
                 rec.get("nickname_confirmed", False),
                 rec.get("class_assigned", has_class),
@@ -948,7 +1019,6 @@ async def onboardstatus(ctx, member: discord.Member = None):
         await ctx.send("Failed to read onboarding status.")
         audit("onboardstatus_error", ctx.author, error=str(e))
 
-
 @bot.event
 async def on_member_join(member):
     try:
@@ -956,16 +1026,32 @@ async def on_member_join(member):
 
         record = verified_users.get(str(member.id), {})
         if record.get("verified"):
-            member_role = discord.utils.get(member.guild.roles, name=MEMBER_ROLE)
-            if member_role:
-                await member.add_roles(member_role)
+            track = record.get("track", DEFAULT_TRACK)
+            member_role  = discord.utils.get(member.guild.roles, name=MEMBER_ROLE)
+            visitor_role = discord.utils.get(member.guild.roles, name=VISITOR_ROLE)
+            newcomer_role = discord.utils.get(member.guild.roles, name=NEWCOMER_ROLE)
+
+            target_role = member_role if track == "member" else visitor_role
+            if target_role:
+                try:
+                    await member.add_roles(target_role)
+                except Exception as e:
+                    logging.error(f"[REJOIN] Failed adding {track} role to {member}: {e}")
+
+            if newcomer_role and newcomer_role in member.roles:
+                try:
+                    await member.remove_roles(newcomer_role, reason="Rejoin cleanup")
+                except Exception as e:
+                    logging.error(f"[REJOIN] Failed removing Newcomer from {member}: {e}")
+
             try:
                 await member.send("Welcome back! You're already verified.")
             except Exception:
                 pass
-            audit("member_rejoin_verified", member, roles=[r.name for r in member.roles])
+            audit("member_rejoin_verified", member, track=track, roles=[r.name for r in member.roles])
             return
 
+        # New user path (unchanged except note about duplicate sends below)
         newcomer_role = discord.utils.get(member.guild.roles, name=NEWCOMER_ROLE)
         newcomer_assigned = False
         if newcomer_role:
@@ -974,12 +1060,12 @@ async def on_member_join(member):
 
         channel = discord.utils.get(member.guild.text_channels, name=ONBOARDING_CHANNEL)
         if channel:
+            # EITHER just this:
             await send_onboarding_embed(member)
-            await channel.send(
-                f"{member.mention} Please follow the instructions above:",
-                view=VerificationView()
-            )
-            await prompt_for_class_role(member)
+            # (and remove the two lines below)
+            # OR if you prefer a second message, remove send_onboarding_embed above.
+            # await channel.send(f"{member.mention} Please follow the instructions above:", view=VerificationView())
+            # await prompt_for_class_role(member)  # not needed if VerificationView includes ClassRoleSelect
 
         audit("member_join_initialized",
               member,
@@ -989,6 +1075,7 @@ async def on_member_join(member):
     except Exception as e:
         logging.error(f"[ERROR] on_member_join failed for {member.name}: {e}")
         audit("member_join_error", member, error=str(e))
+
 
 @bot.event
 async def on_member_remove(member):
@@ -1371,25 +1458,28 @@ async def audit_snapshot(ctx: commands.Context, *args: str):
         await ctx.send("❌ Failed to write audit snapshot. Check logs.")
 
 
+# =========================
+# STARTUP RECONCILIATION (track-aware)
+# =========================
 async def retro_verify_existing_members(guild: discord.Guild) -> None:
     """
-    On startup, reconcile verification state with roles:
-      - If a member HAS the Guild Member role but is not verified in DB -> mark verified and fill flags.
-      - If a member IS verified in DB but LACKS the Guild Member role -> grant Guild Member role.
-      - If Newcomer remains on a verified member -> remove it.
-      - Persist changes and write structured audit lines.
+    Reconcile DB flags with actual roles at startup, honoring track:
+      - If user has target role (Guild Member or Visitor) but DB not verified -> set verified + flags.
+      - If DB says verified but target role missing -> add it.
+      - Remove Newcomer from verified users.
+      - Infer track from roles if missing.
     """
     try:
-        member_role = discord.utils.get(guild.roles, name=MEMBER_ROLE)
+        member_role  = discord.utils.get(guild.roles, name=MEMBER_ROLE)
+        visitor_role = discord.utils.get(guild.roles, name=VISITOR_ROLE)
         newcomer_role = discord.utils.get(guild.roles, name=NEWCOMER_ROLE)
 
-        if not member_role:
-            logging.warning(f"[RETROVERIFY] '{MEMBER_ROLE}' role not found in guild '{guild.name}' ({guild.id})")
-            return
+        if not member_role and not visitor_role:
+            logging.warning(f"[RETROVERIFY] Missing one/both roles: '{MEMBER_ROLE}', '{VISITOR_ROLE}'")
 
         total_checked = 0
         total_updated_db = 0
-        total_added_member_role = 0
+        total_added_role = 0
         total_removed_newcomer = 0
 
         for m in guild.members:
@@ -1398,79 +1488,69 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
             uid = str(m.id)
             rec = verified_users.get(uid, {}) or {}
 
-            has_member_role = member_role in m.roles
-            has_newcomer_role = newcomer_role in m.roles if newcomer_role else False
-            has_any_class_role = any(r.name in CLASS_ROLES for r in m.roles)
+            has_member   = member_role in m.roles if member_role else False
+            has_visitor  = visitor_role in m.roles if visitor_role else False
+            has_newcomer = newcomer_role in m.roles if newcomer_role else False
+            has_class    = any(r.name in CLASS_ROLES for r in m.roles)
 
-            # A) Already Guild Member but not verified in DB -> mark as verified and fill flags.
-            if has_member_role and not rec.get("verified", False):
+            # Infer track if missing
+            track = rec.get("track")
+            if track not in VALID_TRACKS:
+                track = "member" if has_member else "visitor" if has_visitor else DEFAULT_TRACK
+                rec["track"] = track
+
+            target_role = member_role if track == "member" else visitor_role
+            has_target  = (target_role in m.roles) if target_role else False
+
+            # A) Has target role but DB not verified -> mark verified and set flags
+            if has_target and not rec.get("verified", False):
                 rec["verified"] = True
                 rec["rules_accepted"] = True
                 rec["nickname_confirmed"] = True
-                if has_any_class_role:
-                    rec["class_assigned"] = True  # reflect existing class role
+                if has_class:
+                    rec["class_assigned"] = True
                 verified_users[uid] = rec
-                save_verified()  # persist change
+                save_verified()
                 total_updated_db += 1
 
-                # If they still have Newcomer, remove it.
-                if has_newcomer_role:
+                if has_newcomer and newcomer_role:
                     try:
-                        await m.remove_roles(newcomer_role, reason="Retro-verify: already Guild Member")
+                        await m.remove_roles(newcomer_role, reason="Retro-verify: already target role")
                         total_removed_newcomer += 1
                     except Exception as e:
-                        logging.error(f"[RETROVERIFY] Failed removing Newcomer from {m}: {e}")
+                        logging.error(f"[RETROVERIFY] remove newcomer: {e}")
 
-                # Log
                 try:
-                    audit(
-                        "retro_verify_member",
-                        m,
-                        set_verified=True,
-                        set_rules_accepted=True,
-                        set_nickname_confirmed=True,
-                        set_class_assigned=bool(rec.get("class_assigned")),
-                        removed_newcomer=has_newcomer_role,
-                        ensured_member_role=True,
-                        roles=[r.name for r in m.roles]
-                    )
+                    audit("retro_verify_member", m, track=track, ensured_role=True, roles=[r.name for r in m.roles])
                 except Exception:
                     pass
                 continue
 
-            # B) Verified in DB but missing Guild Member role -> grant it now.
-            if rec.get("verified", False) and not has_member_role:
+            # B) DB says verified but missing target role -> add role
+            if rec.get("verified", False) and not has_target and target_role:
                 try:
-                    await m.add_roles(member_role, reason="Retro-verify: verified but missing Guild Member")
-                    total_added_member_role += 1
+                    await m.add_roles(target_role, reason="Retro-verify: verified but missing target role")
+                    total_added_role += 1
                 except Exception as e:
-                    logging.error(f"[RETROVERIFY] Failed adding Guild Member to {m}: {e}")
+                    logging.error(f"[RETROVERIFY] add target role: {e}")
 
-                # Remove Newcomer if present.
-                if has_newcomer_role:
+                if has_newcomer and newcomer_role:
                     try:
                         await m.remove_roles(newcomer_role, reason="Retro-verify: verified user cleanup")
                         total_removed_newcomer += 1
                     except Exception as e:
-                        logging.error(f"[RETROVERIFY] Failed removing Newcomer from {m}: {e}")
+                        logging.error(f"[RETROVERIFY] remove newcomer: {e}")
 
                 try:
-                    audit(
-                        "retro_verify_promote_member_role",
-                        m,
-                        ensured_member_role=True,
-                        removed_newcomer=has_newcomer_role,
-                        verified_in_db=True,
-                        roles=[r.name for r in m.roles]
-                    )
+                    audit("retro_verify_promote_role", m, track=track, ensured_role=True, roles=[r.name for r in m.roles])
                 except Exception:
                     pass
                 continue
 
-            # C) Consistent: verified + member (clean up stray Newcomer), or unverified + no member.
-            if rec.get("verified", False) and has_member_role and has_newcomer_role:
+            # C) Clean up stray Newcomer for verified users
+            if rec.get("verified", False) and has_newcomer and newcomer_role:
                 try:
-                    await m.remove_roles(newcomer_role, reason="Retro-verify: cleanup for verified member")
+                    await m.remove_roles(newcomer_role, reason="Retro-verify: cleanup for verified user")
                     total_removed_newcomer += 1
                     try:
                         audit("retro_verify_cleanup_newcomer", m, removed_newcomer=True)
@@ -1479,7 +1559,6 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
                 except Exception as e:
                     logging.error(f"[RETROVERIFY] Failed removing stray Newcomer from {m}: {e}")
 
-        # Summary audit
         try:
             audit(
                 "retro_verify_summary",
@@ -1488,7 +1567,7 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
                 guild_name=guild.name,
                 total_checked=total_checked,
                 total_updated_db=total_updated_db,
-                total_added_member_role=total_added_member_role,
+                total_added_role=total_added_role,
                 total_removed_newcomer=total_removed_newcomer
             )
         except Exception:
@@ -1497,7 +1576,7 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
         logging.info(
             f"[RETROVERIFY] Guild '{guild.name}' ({guild.id}) "
             f"checked={total_checked} updated_db={total_updated_db} "
-            f"added_member_role={total_added_member_role} removed_newcomer={total_removed_newcomer}"
+            f"added_role={total_added_role} removed_newcomer={total_removed_newcomer}"
         )
 
     except Exception as e:
@@ -1506,9 +1585,6 @@ async def retro_verify_existing_members(guild: discord.Guild) -> None:
             audit("retro_verify_error", None, guild_id=guild.id, error=str(e))
         except Exception:
             pass
-
-
-
 
 def is_admin_or_owner(ctx):
     return (
@@ -1520,13 +1596,11 @@ def is_admin_or_owner(ctx):
 @bot.command()
 @commands.has_permissions(manage_roles=True)
 async def reverify(ctx, member: discord.Member = None):
-    """Re-post onboarding UI and class prompt for a user."""
+    """Re-post onboarding UI for a user."""
     try:
         member = member or ctx.author
         await send_onboarding_embed(member)
-        await ctx.send(f"{member.mention} please complete onboarding below:", view=VerificationView())
-        await prompt_for_class_role(member)
-        await ctx.send("Class selection prompt re-sent.")
+        await ctx.send(f"{member.mention} please complete onboarding above.")
     except Exception as e:
         logging.error(f"[ERROR] reverify: {e}")
         await ctx.send("Failed to re-post onboarding. Check logs.")
@@ -1548,13 +1622,81 @@ async def refresh_raids_command(ctx: commands.Context, scan: int = 50):
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def verified(ctx):
-    """List all currently verified users by ID."""
-    try:
-        await ctx.send(f"Verified users: {list(verified_users.keys())}")
-    except Exception as e:
-        logging.error(f"[ERROR] verified cmd: {e}")
-        await ctx.send("Failed to list verified users.")
+async def verified(ctx, mode: str = "list"):
+    """
+    Show verified users.
+    Usage:
+      !verified                -> pretty list (paginated)
+      !verified count          -> just a count
+      !verified file           -> CSV export
+      !verified visitors       -> only track=visitor
+      !verified members        -> only track=member
+    """
+    # Gather rows from DB -> live guild members
+    guild = ctx.guild
+    rows = []
+    for uid, rec in verified_users.items():
+        if not rec or not rec.get("verified"):
+            continue
+        m = guild.get_member(int(uid))
+        if not m:
+            continue  # not in this guild anymore
+        track = rec.get("track", DEFAULT_TRACK)
+        joined = getattr(m, "joined_at", None)
+        rows.append({
+            "id": uid,
+            "name": getattr(m, "name", str(uid)),
+            "display": m.display_name,
+            "track": track if track in VALID_TRACKS else DEFAULT_TRACK,
+            "joined": joined.isoformat(timespec="seconds") if joined else "",
+        })
+
+    if mode.lower() == "count":
+        await ctx.send(f"✅ Verified users in **{guild.name}**: **{len(rows)}**")
+        return
+
+    # Optional filtering by track
+    filt = mode.lower()
+    if filt in {"members", "member"}:
+        rows = [r for r in rows if r["track"] == "member"]
+    elif filt in {"visitors", "visitor"}:
+        rows = [r for r in rows if r["track"] == "visitor"]
+    elif filt in {"file", "csv"}:
+        import io, csv
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["User ID", "Username", "Display Name", "Track", "Joined"])
+        for r in rows:
+            w.writerow([r["id"], r["name"], r["display"], r["track"], r["joined"]])
+        data = io.BytesIO(buf.getvalue().encode("utf-8"))
+        await ctx.send(file=discord.File(fp=data, filename="verified_users.csv"))
+        return
+    # else: pretty list
+
+    # Sort by joined date then name (joined may be empty)
+    rows.sort(key=lambda r: (r["joined"] == "", r["joined"], r["display"].lower()))
+
+    # Build a compact monospace table (Name | Track | Joined | ID tail)
+    def tail(s, n=6): 
+        return str(s)[-n:]
+
+    header = f"{'Display Name':<24} {'Track':<8} {'Joined (UTC)':<19} ID"
+    sep = "-" * len(header)
+
+    # paginate safely under 2000 chars
+    out = ["```\n" + header + "\n" + sep]
+    for r in rows:
+        joined_short = (r["joined"].replace('T',' ')[:19]) if r["joined"] else "-"
+        line = f"{r['display'][:24]:<24} {r['track']:<8} {joined_short:<19} {tail(r['id'])}"
+        # send a chunk if adding this line would exceed limit
+        if sum(len(x) for x in out) + len(line) + 5 > 1990:
+            out[-1] += "\n```"
+            await ctx.send(out[-1])
+            out = ["```\n" + header + "\n" + sep]
+        out[-1] += "\n" + line
+
+    out[-1] += "\n```"
+    await ctx.send(out[-1] if rows else "ℹ️ No verified users found.")
 
 # =========================
 # ALT / CLASS COMMANDS (unchanged behavior)
