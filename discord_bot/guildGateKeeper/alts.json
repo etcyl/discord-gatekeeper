@@ -1,0 +1,36 @@
+{
+  "606266945460764727": {
+    "main": "Demani",
+    "alts": {
+      "Terani": "Mage"
+    },
+    "class": "Druid"
+  },
+  "99594709315354624": {
+    "alts": {
+      "Antimidas": "Paladin",
+      "Deelystan": "Hunter",
+      "Bearcules": "Druid",
+      "Billyquizboy": "Mage",
+      "Parkersband": "Warlock",
+      "Bingtoolbank": "Rogue",
+      "Thenightfly": "Warlock",
+      "Pixeleen": "Warlock"
+    },
+    "main": "Bingtoolbar"
+  },
+  "745409016716328962": {
+    "alts": {
+      "Boosntattoos": "Warlock",
+      "Tattedsister": "Priest"
+    },
+    "main": "PrettyTatted"
+  },
+  "99632631934644224": {
+    "alts": {
+      "Brigutu": "Warrior",
+      "Pretzelwood": "Hunter"
+    },
+    "main": "Wimlo"
+  }
+}

@@ -1,0 +1,850 @@
+{
+  "member_joins": [
+    {
+      "time": "2025-10-18 12:31:10",
+      "display": "Ghoulag",
+      "user": "ghoulag",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-10-18 12:30:54",
+      "display": "Ghoulag",
+      "user": "ghoulag",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-10-17 20:19:19",
+      "display": "Dillmill",
+      "user": "dillmill.",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-10-14 15:23:15",
+      "display": "Sularas",
+      "user": "jimfuu",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-10-12 13:00:37",
+      "display": "Merc",
+      "user": "jimfuu",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-10-12 12:58:44",
+      "display": "AMPP",
+      "user": "ampp_",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-10-11 22:04:39",
+      "display": "Tereidis",
+      "user": "tereidis_42421",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-10-11 22:00:48",
+      "display": "Tereidis",
+      "user": "tereidis_42421",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-10-04 17:21:32",
+      "display": "Holywah",
+      "user": "mrhi6hway",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-10-04 17:21:17",
+      "display": "Holywah",
+      "user": "mrhi6hway",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-10-04 15:43:28",
+      "display": "Powerwordùwú",
+      "user": "peptodog",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-10-04 15:42:14",
+      "display": "Powerworduwu",
+      "user": "peptodog",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-10-04 15:17:52",
+      "display": "SwankyPants",
+      "user": "starks5406",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-10-04 15:17:26",
+      "display": "SwankyPants",
+      "user": "starks5406",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-10-04 11:32:12",
+      "display": "Stoned",
+      "user": "_denots_",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-10-04 07:12:19",
+      "display": "Objuan Jabrony",
+      "user": "objuan_jabroni",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-09-28 18:36:23",
+      "display": "vinxy",
+      "user": "boomeyer8664",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-09-28 18:34:24",
+      "display": "vinxey",
+      "user": "boomeyer8664",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-09-27 08:48:27",
+      "display": "Mojin",
+      "user": "thesupermayne",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-09-27 08:47:47",
+      "display": "Mojin",
+      "user": "thesupermayne",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-09-27 08:44:18",
+      "display": "TheSupermayne",
+      "user": "thesupermayne",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-09-27 08:43:32",
+      "display": "TheSupermayne",
+      "user": "thesupermayne",
+      "status": "Newcomer"
+    },
+    {
+      "time": "2025-09-21 15:56:20",
+      "display": "WigglyTaffy",
+      "user": "wigglytaffy",
+      "status": "Guild Member"
+    },
+    {
+      "time": "2025-09-21 15:54:18",
+      "display": "FluffyBanshee",
+      "user": "fluffybanshee",
+      "status": "Guild Member"
+    }
+  ],
+  "visitor_joins": [
+    {
+      "time": "2025-10-19 16:53:22",
+      "display": "Faletheus",
+      "user": "faletheus",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 17:03:52",
+      "display": "HiggyHam",
+      "user": "higgyham",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 16:59:26",
+      "display": "Stevi_",
+      "user": "stevi_",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 16:07:47",
+      "display": "Svar / Ayahwaska",
+      "user": "ayahwasca",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 16:07:28",
+      "display": "Svar / Ayahwaska",
+      "user": "ayahwasca",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 16:07:10",
+      "display": "Svar / Ayahwaska",
+      "user": "ayahwasca",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 16:04:43",
+      "display": "Peirre/Taxonomy",
+      "user": "mail3320",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 16:03:50",
+      "display": "Peirre/Taxonomy",
+      "user": "mail3320",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 15:42:28",
+      "display": "Dazerìk",
+      "user": "dazerik",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 15:41:29",
+      "display": "DaZeRIK",
+      "user": "dazerik",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 15:35:36",
+      "display": "Banzzai",
+      "user": "banzai9851",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 14:35:47",
+      "display": "Artèmïs",
+      "user": "topophobia",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 14:33:45",
+      "display": "topophobia",
+      "user": "topophobia",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 14:15:30",
+      "display": "Kárlfranz",
+      "user": "itzzrexy9321",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 14:14:06",
+      "display": "Rex",
+      "user": "itzzrexy9321",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 00:18:10",
+      "display": "Lucent",
+      "user": "blackrockchan",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-18 00:15:09",
+      "display": "Raspberry",
+      "user": "blackrockchan",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-17 11:13:08",
+      "display": "Valyrja",
+      "user": "gazzlefraz",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-17 11:12:58",
+      "display": "Valyrja",
+      "user": "gazzlefraz",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-17 09:37:22",
+      "display": "Sneakyjoo",
+      "user": "zach1467",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-17 08:55:49",
+      "display": "Vergina",
+      "user": "spacelacesbass",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-17 08:55:20",
+      "display": "Vergina",
+      "user": "spacelacesbass",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-16 17:03:07",
+      "display": "SomberBurn / MorbidFaith",
+      "user": "doubtfullly",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-16 17:02:51",
+      "display": "SomberBurn / MorbidFaith",
+      "user": "doubtfullly",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-16 11:12:32",
+      "display": "Sumdumfgnguy",
+      "user": "cronico5914",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-16 11:11:56",
+      "display": "Cronico",
+      "user": "cronico5914",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-14 12:20:52",
+      "display": "SomberBurn / MorbidFaith",
+      "user": "doubtfullly",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-14 12:20:38",
+      "display": "SomberBurn / MorbidFaith",
+      "user": "doubtfullly",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-06 18:30:11",
+      "display": "Adrasera",
+      "user": "fenrir0044",
+      "status": "Visitor"
+    },
+    {
+      "time": "2025-10-04 05:48:50",
+      "display": "Karses",
+      "user": "fenrir0044",
+      "status": "Visitor"
+    }
+  ],
+  "leavers": [
+    {
+      "time": "20:00:23",
+      "display": "Arronaxx",
+      "user": "glenn9263",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-19 16:58:40",
+      "display": "Faletheus",
+      "user": "faletheus",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-18 20:03:44",
+      "display": "Dazerìk",
+      "user": "dazerik",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-18 15:33:29",
+      "display": "kkluv",
+      "user": "kkluv0066",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-17 17:50:20",
+      "display": "Goliathd",
+      "user": "pimpdonny",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-10-16 18:48:04",
+      "display": "Reedy17",
+      "user": "reedy17",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-16 17:11:20",
+      "display": "SomberBurn / MorbidFaith",
+      "user": "doubtfullly",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-15 17:53:29",
+      "display": "Babys",
+      "user": "estebunz",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-15 17:52:22",
+      "display": "Nakú",
+      "user": "naku_na",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-15 12:11:01",
+      "display": "pyroblasting",
+      "user": "evilsprit",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-15 10:05:46",
+      "display": "Yethu",
+      "user": "howardlol7335",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-15 03:05:31",
+      "display": "Kodrazz",
+      "user": "kodrazz",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-14 12:21:32",
+      "display": "SomberBurn / MorbidFaith",
+      "user": "doubtfullly",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-14 10:09:20",
+      "display": "Goliathd",
+      "user": "pimpdonny",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-13 14:17:03",
+      "display": "Bootyfloss",
+      "user": "bootyfloss",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-13 06:32:16",
+      "display": "dougandude",
+      "user": "oldorithy",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-12 06:24:40",
+      "display": "Laggs",
+      "user": "laggs1929",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-12 05:53:31",
+      "display": "Tripiatrick",
+      "user": "tripiatrick",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-11 18:20:51",
+      "display": "SwankyPants",
+      "user": "starks5406",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-11 16:45:12",
+      "display": "Magebanshee",
+      "user": "fluffybanshee",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-11 13:34:59",
+      "display": "Gnatty",
+      "user": ".gnatty",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-10 20:27:19",
+      "display": "SirStabbin",
+      "user": "jackkelly877",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-10 17:10:28",
+      "display": "Jack",
+      "user": "jackkelly877",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-07 09:53:33",
+      "display": "ARCADlIA",
+      "user": "maxxxxjjj",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-10-05 04:30:01",
+      "display": "Powerwordùwú",
+      "user": "peptodog",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-03 09:52:34",
+      "display": "strizzle5974",
+      "user": "strizzle5974",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-02 22:48:57",
+      "display": "Novacloud",
+      "user": "gummybears_",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-01 14:54:40",
+      "display": "Khrohm",
+      "user": "khrohmkhai",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-01 13:52:44",
+      "display": "Mistashawty",
+      "user": "garlictoast",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-10-01 13:52:33",
+      "display": "makjuice.",
+      "user": "makjuice.",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-25 12:05:00",
+      "display": "Gangus/CoReWolf",
+      "user": ".corewolf.",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-23 15:31:00",
+      "display": "Zousho",
+      "user": "zousho",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-21 22:20:24",
+      "display": "gethreyn",
+      "user": "gethreyn",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-21 21:45:07",
+      "display": "Palypatronus",
+      "user": "doogypoogoo",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-21 17:57:21",
+      "display": "dropos",
+      "user": "yonaiker7",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-21 15:35:45",
+      "display": "Fhatcak",
+      "user": "breezy44.",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-21 14:31:00",
+      "display": "Üthér",
+      "user": "funkymonkey1000",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-20 17:19:58",
+      "display": "Melesta",
+      "user": "kieran7832",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-19 14:58:05",
+      "display": "Lerelle",
+      "user": "phishh_",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-19 14:50:59",
+      "display": "Rayorlia",
+      "user": "bigbadbrenner",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-19 14:50:52",
+      "display": "Kravthor",
+      "user": "krav6443",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-19 14:50:46",
+      "display": "Jarvinsteain",
+      "user": "sjhonjeff8640",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-19 14:50:42",
+      "display": "gladimx",
+      "user": "mdyzaa",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-19 14:50:26",
+      "display": "Austinwar",
+      "user": "condurem",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-19 14:50:16",
+      "display": "ヅʙᴀɴᴅɪᴅᴏ⁵⁰⁷",
+      "user": "bandido507",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-19 14:49:20",
+      "display": "Dametae",
+      "user": "dametae",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-19 14:49:15",
+      "display": "Niahe",
+      "user": "niah22",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-18 16:35:39",
+      "display": "Isage",
+      "user": "supremacy9320",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-18 11:31:40",
+      "display": "Flirty",
+      "user": "xunari",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-17 12:41:11",
+      "display": "spankmygnome",
+      "user": "spankmygnome",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-16 20:01:18",
+      "display": "Edédelan",
+      "user": "edens0402",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-16 08:17:57",
+      "display": "Dieforme",
+      "user": "dieforme9894",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-15 09:37:41",
+      "display": "Sketchyheals",
+      "user": "brokenhealer.",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-12 14:51:32",
+      "display": "Nathaella",
+      "user": "raphieruuu",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-12 14:49:41",
+      "display": "Magzone",
+      "user": "okarune_99",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-12 14:49:30",
+      "display": "Luckypro",
+      "user": "rns3941",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-11 14:42:04",
+      "display": "Bigbore/FreezeF",
+      "user": "blahblah1383",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-09 15:39:48",
+      "display": "ustaz levi",
+      "user": "maxi_79712",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-06 19:44:42",
+      "display": "RabbitGrim",
+      "user": "rabbitgrim",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-06 16:29:08",
+      "display": "MantisToboggans",
+      "user": "blankets6197",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-06 16:29:03",
+      "display": "Ivorwen",
+      "user": "winter4214",
+      "removed_alts": true,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-09-06 14:49:30",
+      "display": "thestalos",
+      "user": "thestalos6080",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-05 19:34:27",
+      "display": "Daniyal",
+      "user": "ian_the_rhino_",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-05 19:32:21",
+      "display": "Valerra",
+      "user": "badger5153",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-05 19:32:05",
+      "display": "Spellwrench",
+      "user": ".lord.1",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-05 19:32:00",
+      "display": "Bivvrip",
+      "user": "warppath",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-04 23:27:46",
+      "display": "Affogarto",
+      "user": "jac4700",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-04 21:39:46",
+      "display": "Lorthryn",
+      "user": "phoenix3488",
+      "removed_alts": false,
+      "removed_verified": false
+    },
+    {
+      "time": "2025-09-03 09:24:20",
+      "display": "Mantis Toboggans M.D",
+      "user": "blankets6197",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-08-18 20:00:23",
+      "display": "Arronaxx",
+      "user": "glenn9263",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-08-14 13:56:43",
+      "display": "chungus_amongus",
+      "user": "chungus_amongus9516",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "2025-08-14 13:54:15",
+      "display": "chungus_amongus",
+      "user": "chungus_amongus9516",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "13:56:43",
+      "display": "chungus_amongus",
+      "user": "chungus_amongus9516",
+      "removed_alts": false,
+      "removed_verified": true
+    },
+    {
+      "time": "13:54:15",
+      "display": "chungus_amongus",
+      "user": "chungus_amongus9516",
+      "removed_alts": false,
+      "removed_verified": true
+    }
+  ]
+}

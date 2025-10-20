@@ -1,0 +1,128 @@
+GENERAL COMMANDS (Available to All Members)
+
+!listalts \[@member]
+Who can use: All members
+What it does: Shows the main and alts for a member. If no member is provided, it shows your own.
+Example:
+!listalts               → shows your own main and alts
+!listalts @Khitkat      → shows main and alts for Khitkat
+
+!addalt \<alt\_name> \<alt\_class>
+Who can use: All members
+What it does: Adds a new alt to your account. You can have up to 9 alts.
+Example:
+!addalt Bubblebeam Mage
+
+!removealt \<alt\_name>
+Who can use: All members
+What it does: Removes a previously added alt from your account.
+Example:
+!removealt Bubblebeam
+
+!whoismain \<alt\_name>
+Who can use: All members
+What it does: Looks up which main character the alt belongs to.
+Example:
+!whoismain Bubblebeam
+
+!classstatus \[@member]
+Who can use: All members
+What it does: Shows the class role of yourself or a mentioned member.
+Example:
+!classstatus            → shows your own class
+!classstatus @Tsubone   → shows Tsubone's class
+
+!classstats
+Who can use: All members
+What it does: Outputs a full summary of class counts (mains and alts), then uploads a bar chart image.
+Example:
+!classstats
+
+!resetclass \[@member]
+Who can use:
+Self-use: Any member (60s cooldown)
+Others: Only admins or bot owner
+What it does: Clears the class role and re-prompts the dropdown menu to choose a new one.
+Example:
+!resetclass                 → resets your own class
+!resetclass @prettytatted   → resets another member (admin only)
+
+ADMIN/OWNER COMMANDS
+
+!gatesnapshot [filter]
+Who can use: Admins only
+What it does: Generates and logs a current onboarding gate snapshot for all members. Flags are color-coded with :white_check_mark: and :x:. If an optional filter is provided (verified or unverified), only that subset of members will be printed and logged, along with their join date if available.
+Example:
+!gatesnapshot → shows all members with full gate flags
+!gatesnapshot unverified → shows only unverified members
+
+!debuggate <@member>
+Who can use: Admins only
+What it does: Shows the gate flags and roles for a specific member, including rules acceptance, nickname confirmation, class assignment, verified status, and all roles they currently have.
+Example:
+!debuggate @chungus_amongus
+
+!fixgate
+Who can use: Admins only
+What it does: Re-runs the onboarding gate check for every member in the guild. This will attempt to promote any members who meet the verification criteria and demote any who do not. Logs all actions taken.
+Example:
+!fixgate
+
+!reassignalt \<alt\_name> <@member> <class>
+Who can use: Admins or bot owner
+What it does: Transfers an alt to another member and assigns a class.
+Example:
+!reassignalt Bubblebeam @Khitkat Mage
+
+!setmainfor <@member> \<main\_name> \[main\_class]
+Who can use: Admins or bot owner
+What it does: Sets the main character name (and optionally the class) for another member.
+Example:
+!setmainfor @Khitkat Bubblebeam Mage
+!setmainfor @Khitkat Bubblebeam
+
+!importalts
+Who can use: Admins only
+What it does: Loads alt data from a file called alts\_import.csv with format:
+MainName,Alt1,Alt2,...
+Example:
+Upload the file into the bot’s folder, then run:
+!importalts
+
+!exportclasses
+Who can use: Admins only
+What it does: Exports all members with class roles to a file class\_roles\_export.csv.
+Example:
+!exportclasses
+
+!forceverify <@member>
+Who can use: Admins only
+What it does: Manually marks a member as verified, removing Newcomer and assigning the Member role.
+Example:
+!forceverify @Tebes
+
+!verified
+Who can use: Admins only
+What it does: Lists all Discord user IDs marked as verified.
+Example:
+!verified
+
+Linux Commands:
+
+ps aux | grep bot.py
+Check if bot is running
+
+pkill -f bot.py
+Kill the bot
+
+tail -f discord\_bot.log
+View live logs
+
+systemctl status discordbot
+Check if it's running
+
+journalctl -u discordbot -f
+View live logs
+
+ sudo systemctl restart discordbot.service
+ restart bot
